@@ -3,6 +3,7 @@ import requests
 import time
 import queue
 import copy
+import json
 
 class data_crawler(threading.Thread):
     def __init__(self, data_queue: queue.Queue, supported_ticker: set, supported_period: dict, download_format: dict):
@@ -44,6 +45,9 @@ class data_crawler(threading.Thread):
             if self.downloaded_prices[ticker][period][0] is None:
                 return False
         return True
+    
+    def get_downloaded_datas(self): # for testing
+        return self.downloaded_prices
 
     def download_datas(self, ticker, period, startTime, endTime):
         url = f"https://api.bitget.com/api/mix/v1/market/history-candles?symbol={ticker}&granularity={period}&startTime={startTime}&endTime={endTime}"
@@ -59,10 +63,8 @@ class data_crawler(threading.Thread):
             else:
                 print("Have to try downloading few later because of unexpected result ", response.status_code)
                 time.sleep(1 / self.limit_per_sec)
-        
-        # to be added
 
-        return response.content
+        return json.loads(response.content)
 
     def run(self):
         while self.running:
