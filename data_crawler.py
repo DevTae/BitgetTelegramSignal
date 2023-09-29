@@ -63,8 +63,14 @@ class data_crawler(threading.Thread):
             else:
                 print("Have to try downloading few later because of unexpected result ", response.status_code)
                 time.sleep(1 / self.limit_per_sec)
+        
+        datas = json.loads(response.content)
 
-        return json.loads(response.content)
+        for idx, data in enumerate(datas):
+            data = list(map(float, data))
+            datas[idx] = data
+
+        return datas
 
     def run(self):
         while self.running:
