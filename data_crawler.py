@@ -30,6 +30,7 @@ class data_crawler(threading.Thread):
                                                                                 startTime=self.now - self.supported_period[period][0] * self.supported_period[period][1],
                                                                                 endTime=self.now)
                 self.downloaded_prices[ticker][period][1] = self.now # 시간 갱신
+                #self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
                 
                 if self.data_queue is not None:
                     if self.is_all_downloaded(ticker):
@@ -83,6 +84,7 @@ class data_crawler(threading.Thread):
                                                                                         startTime=self.now - self.supported_period[period][0] * self.supported_period[period][1],
                                                                                         endTime=self.now)
                         self.downloaded_prices[ticker][period][1] = self.now # 시간 갱신
+                        #self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
 
                         if self.data_queue is not None:
                             if self.is_all_downloaded(ticker):
