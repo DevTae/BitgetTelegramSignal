@@ -2,42 +2,53 @@ import threading
 import requests
 import time
 import queue
+import copy
+import json
 
 class data_crawler(threading.Thread):
-    def __init__(self, data_queue: queue.Queue):
+    def __init__(self, data_queue: queue.Queue, supported_ticker: set, supported_period: dict, download_format: dict):
         threading.Thread.__init__(self)
 
-        # { period : [ limit, milliseconds ] } (limit <= 200)
-        self.supported_period = { "5m" : [ 100, 300000 ],
-                                  "15m" : [ 100, 900000 ],
-                                  "1H" : [ 100, 3600000 ] ,
-                                  "6H" : [ 100, 21600000 ],
-                                  "1D" : [ 100, 86400000 ] }
-        # { period : [ datas, lasttime ] }
-        self.downloaded_datas = { "5m" : [ None, None ],
-                                  "15m" : [ None, None ],
-                                  "1H" : [ None, None ],
-                                  "6H" : [ None, None ],
-                                  "1D" : [ None, None ] }
+        self.supported_ticker = supported_ticker
+        self.supported_period = supported_period
+        self.download_format = download_format
         
-        self.supported_ticker = { "BTCUSDT_UMCBL" } # 더 많아지면 limit_per_sec 기반 로직 짤 것을 권고
+        # { ticker : download_format }
+        self.downloaded_prices = {}
+        
         self.limit_per_sec = 20
-        self.now = int(time.time() * 1000)
         self.running = True
         self.data_queue = data_queue
 
-        for key in self.downloaded_datas.keys():
-            self.now = int(time.time() * 1000)
-            for ticker in self.supported_ticker:
-                self.downloaded_datas[key][0] = self.download_datas(ticker=ticker, 
-                                                                    period=key, 
-                                                                    startTime=self.now - self.supported_period[key][0] * self.supported_period[key][1],
-                                                                    endTime=self.now)
-                self.downloaded_datas[key][1] = self.now # 시간 갱신
-                self.data_queue.put((ticker, key, self.downloaded_datas[key][0])) # price_analyzer 로 넘겨줌
+        self.now = int(time.time() * 1000)
+        for idx, ticker in enumerate(self.supported_ticker):
+            self.downloaded_prices.update({ ticker : copy.deepcopy(self.download_format) })
+
+            for period in self.download_format.keys():
+                self.downloaded_prices[ticker][period][0] = self.download_datas(ticker=ticker, 
+                                                                                period=period, 
+                                                                                startTime=self.now - self.supported_period[period][0] * self.supported_period[period][1],
+                                                                                endTime=self.now)
+                self.downloaded_prices[ticker][period][1] = self.now # 시간 갱신
+                #self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
                 
-    def get_supported_period(self):
-        return self.supported_period.keys()
+                if self.data_queue is not None:
+                    if self.is_all_downloaded(ticker):
+                        self.data_queue.put((ticker, self.downloaded_prices.get(ticker))) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
+
+            if idx < len(self.supported_ticker) - 1:
+                time.sleep(len(self.download_format.keys()) * 1 / self.limit_per_sec)
+
+            self.now = int(time.time() * 1000)
+
+    def is_all_downloaded(self, ticker):
+        for period in self.download_format.keys():
+            if self.downloaded_prices[ticker][period][0] is None:
+                return False
+        return True
+    
+    def get_downloaded_datas(self): # for testing
+        return self.downloaded_prices
 
     def download_datas(self, ticker, period, startTime, endTime):
         url = f"https://api.bitget.com/api/mix/v1/market/history-candles?symbol={ticker}&granularity={period}&startTime={startTime}&endTime={endTime}"
@@ -49,26 +60,40 @@ class data_crawler(threading.Thread):
                 break
             elif response.status_code == 429:
                 print("Have to try downloading few later because of many requests in frequently 429")
-                time.sleep(0.5)
+                time.sleep(1 / self.limit_per_sec)
             else:
                 print("Have to try downloading few later because of unexpected result ", response.status_code)
-                time.sleep(0.1)
-                
-        return response.content
+                time.sleep(1 / self.limit_per_sec)
+        
+        datas = json.loads(response.content)
+
+        for idx, data in enumerate(datas):
+            data = list(map(float, data))
+            datas[idx] = data
+
+        return datas
 
     def run(self):
         while self.running:
-            for key in self.downloaded_datas.keys():
+            self.now = int(time.time() * 1000)
+            for idx, ticker in enumerate(self.supported_ticker):
+                for period in self.download_format.keys():
+                    if self.now - self.downloaded_prices[ticker][period][1] > self.supported_period[period][1]:
+                        self.downloaded_prices[ticker][period][0] = self.download_datas(ticker=ticker, 
+                                                                                        period=period, 
+                                                                                        startTime=self.now - self.supported_period[period][0] * self.supported_period[period][1],
+                                                                                        endTime=self.now)
+                        self.downloaded_prices[ticker][period][1] = self.now # 시간 갱신
+                        #self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
+
+                        if self.data_queue is not None:
+                            if self.is_all_downloaded(ticker):
+                                self.data_queue.put((ticker, self.downloaded_prices.get(ticker))) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
+
+                if idx < len(self.supported_ticker) - 1:
+                    time.sleep(len(self.download_format.keys()) * 1 / self.limit_per_sec)
+
                 self.now = int(time.time() * 1000)
-                for ticker in self.supported_ticker:
-                    if self.now - self.downloaded_datas[key][1] > self.supported_period[key][1]:
-                        self.downloaded_datas[key][0] = self.download_datas(ticker=ticker, 
-                                                                            period=key, 
-                                                                            startTime=self.now - self.supported_period[key][0] * self.supported_period[key][1],
-                                                                            endTime=self.now)
-                        self.downloaded_datas[key][1] = self.now # 시간 갱신
-                        self.data_queue.put((ticker, key, self.downloaded_datas[key][0])) # price_analyzer 로 넘겨줌
-            time.sleep(0.1)
 
     def stop(self):
         self.running = False
