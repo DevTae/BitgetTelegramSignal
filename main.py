@@ -1,4 +1,5 @@
 import queue
+import logging
 
 from data_crawler import data_crawler
 from price_analyzer import price_analyzer
@@ -18,9 +19,14 @@ if __name__ == "__main__":
     buy_sell_ticker = "BTCUSDT_UMCBL"
     supported_ticker = { buy_sell_ticker }
 
+    logging.basicConfig(filename='main.log', level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    stream_handler = logging.StreamHandler()
+    logger.addHandler(stream_handler)
+
     data_queue = queue.Queue() # data_crawler -> price_analyzer
-    analyzer = price_analyzer(buy_sell_ticker, data_queue, download_format)
-    crawler = data_crawler(data_queue, supported_ticker, supported_period, download_format)
+    analyzer = price_analyzer(buy_sell_ticker, data_queue, download_format, logger)
+    crawler = data_crawler(data_queue, supported_ticker, supported_period, download_format, logger)
     analyzer.start()
     crawler.start()
 

@@ -4,14 +4,16 @@ import time
 import queue
 import copy
 import json
+import logging
 
 class data_crawler(threading.Thread):
-    def __init__(self, data_queue: queue.Queue, supported_ticker: set, supported_period: dict, download_format: dict):
+    def __init__(self, data_queue: queue.Queue, supported_ticker: set, supported_period: dict, download_format: dict, logger: logging):
         threading.Thread.__init__(self)
 
         self.supported_ticker = supported_ticker
         self.supported_period = supported_period
         self.download_format = download_format
+        self.logger = logger
         
         # { ticker : download_format }
         self.downloaded_prices = {}
@@ -56,13 +58,13 @@ class data_crawler(threading.Thread):
         while True:
             response = requests.get(url)
             if response.status_code == 200:
-                print(f"Succeed to download datas [{ticker} / {period} / {startTime} / {endTime}]")
+                self.logger.info("Succeed to download datas [" + str(ticker) + "/" + str(period) + "/" + str(startTime) + "/" + str(endTime) + "]")
                 break
             elif response.status_code == 429:
-                print("Have to try downloading few later because of many requests in frequently 429")
+                self.logger.info("Have to try downloading few later because of many requests in frequently 429")
                 time.sleep(1 / self.limit_per_sec)
             else:
-                print("Have to try downloading few later because of unexpected result ", response.status_code)
+                self.logger.info("Have to try downloading few later because of unexpected result " + str(response.status_code))
                 time.sleep(1 / self.limit_per_sec)
         
         datas = json.loads(response.content)

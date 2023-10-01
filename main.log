@@ -1,0 +1,145 @@
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL / 1H / 1695819765935 / 1696179765935]
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL / 6H / 1694019765935 / 1696179765935]
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL / 1D / 1687539765935 / 1696179765935]
+INFO:__main__:--1H--
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL/1H/1695820209010/1696180209010]
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL/6H/1694020209010/1696180209010]
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL/1D/1687540209010/1696180209010]
+INFO:__main__:[log] analyze funtion called :2023-10-02 02:10:09
+INFO:__main__:--1H--
+INFO:__main__:[log] 매물대 분석 결과 :[-1.52504459]
+INFO:__main__:[log] 저항선 설정 불가 : 상단 매물대 분석 불가능
+INFO:__main__:[log] 지지선 :27012
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--6H--
+INFO:__main__:[log] 매물대 분석 결과 :[-0.31672192]
+INFO:__main__:[log] 저항선 설정 불가 : 상단 매물대 분석 불가능
+INFO:__main__:[log] 지지선 :26914
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--1D--
+INFO:__main__:[log] 매물대 분석 결과 :[-0.07387112]
+INFO:__main__:[log] 저항선 :27201
+INFO:__main__:[log] 지지선 :26597
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--1H,6H--long-insight--
+INFO:__main__:[log] RSI_1 지표 : 59.84, 66.61
+INFO:__main__:[log] RSI_2 지표 : 78.55, 74.07
+INFO:__main__:[log] MACD GC PROB 지표 : 0.0
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--6H,1D--long-insight--
+INFO:__main__:[log] RSI_1 지표 : 78.55, 74.07
+INFO:__main__:[log] RSI_2 지표 : 58.4, 59.08
+INFO:__main__:[log] MACD GC PROB 지표 : 0.28
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--1H,6H--short-insight--
+INFO:__main__:[log] RSI_1 지표 : 59.84, 66.61
+INFO:__main__:[log] RSI_2 지표 : 78.55, 74.07
+INFO:__main__:[log] MACD DC PROB 지표 : 1.0
+INFO:__main__:-------
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): api.bitget.com:443
+DEBUG:urllib3.connectionpool:https://api.bitget.com:443 "GET /api/mix/v1/market/history-candles?symbol=BTCUSDT_UMCBL&granularity=1H&startTime=1695820268907&endTime=1696180268907 HTTP/1.1" 200 None
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL/1H/1695820268907/1696180268907]
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): api.bitget.com:443
+DEBUG:urllib3.connectionpool:https://api.bitget.com:443 "GET /api/mix/v1/market/history-candles?symbol=BTCUSDT_UMCBL&granularity=6H&startTime=1694020268907&endTime=1696180268907 HTTP/1.1" 200 None
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL/6H/1694020268907/1696180268907]
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): api.bitget.com:443
+DEBUG:urllib3.connectionpool:https://api.bitget.com:443 "GET /api/mix/v1/market/history-candles?symbol=BTCUSDT_UMCBL&granularity=1D&startTime=1687540268907&endTime=1696180268907 HTTP/1.1" 200 None
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL/1D/1687540268907/1696180268907]
+INFO:__main__:[log] analyze funtion called :2023-10-02 02:11:09
+INFO:__main__:--1H--
+INFO:__main__:[log] 매물대 분석 결과 :[-1.52504459]
+INFO:__main__:[log] 저항선 설정 불가 : 상단 매물대 분석 불가능
+INFO:__main__:[log] 지지선 :27012
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--6H--
+INFO:__main__:[log] 매물대 분석 결과 :[-0.31672192]
+INFO:__main__:[log] 저항선 설정 불가 : 상단 매물대 분석 불가능
+INFO:__main__:[log] 지지선 :26914
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--1D--
+INFO:__main__:[log] 매물대 분석 결과 :[-0.07387112]
+INFO:__main__:[log] 저항선 :27201
+INFO:__main__:[log] 지지선 :26597
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--1H,6H--long-insight--
+INFO:__main__:[log] RSI_1 지표 : 59.84, 66.61
+INFO:__main__:[log] RSI_2 지표 : 78.55, 74.07
+INFO:__main__:[log] MACD GC PROB 지표 : 0.0
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--6H,1D--long-insight--
+INFO:__main__:[log] RSI_1 지표 : 78.55, 74.07
+INFO:__main__:[log] RSI_2 지표 : 58.4, 59.08
+INFO:__main__:[log] MACD GC PROB 지표 : 0.28
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--1H,6H--short-insight--
+INFO:__main__:[log] RSI_1 지표 : 59.84, 66.61
+INFO:__main__:[log] RSI_2 지표 : 78.55, 74.07
+INFO:__main__:[log] MACD DC PROB 지표 : 1.0
+INFO:__main__:-------
+INFO:__main__:
+INFO:__main__:--6H,1D--short-insight--
+INFO:__main__:[log] RSI_1 지표 : 78.55, 74.07
+INFO:__main__:[log] RSI_2 지표 : 58.4, 59.08
+INFO:__main__:[log] MACD DC PROB 지표 : 0.72
+INFO:__main__:-------
+INFO:__main__:
+INFO:__main__:[log] 손익비 :1.0344456404735958
+INFO:__main__:[log] 골든크로스 및 데드크로스가 발생하지 않았습니다.
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL/1H/1695820387370/1696180387370]
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL/6H/1694020387370/1696180387370]
+INFO:__main__:Succeed to download datas [BTCUSDT_UMCBL/1D/1687540387370/1696180387370]
+INFO:__main__:[log] analyze funtion called :2023-10-02 02:13:07
+INFO:__main__:--1H--
+INFO:__main__:[log] 매물대 분석 결과 :[-1.52504459]
+INFO:__main__:[log] 저항선 설정 불가 : 상단 매물대 분석 불가능
+INFO:__main__:[log] 지지선 :27012
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--6H--
+INFO:__main__:[log] 매물대 분석 결과 :[-0.31672192]
+INFO:__main__:[log] 저항선 설정 불가 : 상단 매물대 분석 불가능
+INFO:__main__:[log] 지지선 :26914
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--1D--
+INFO:__main__:[log] 매물대 분석 결과 :[-0.07387112]
+INFO:__main__:[log] 저항선 :27201
+INFO:__main__:[log] 지지선 :26597
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--1H,6H--long-insight--
+INFO:__main__:[log] RSI_1 지표 : 59.84, 66.61
+INFO:__main__:[log] RSI_2 지표 : 78.55, 74.07
+INFO:__main__:[log] MACD GC PROB 지표 : 0.0
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--6H,1D--long-insight--
+INFO:__main__:[log] RSI_1 지표 : 78.55, 74.07
+INFO:__main__:[log] RSI_2 지표 : 58.4, 59.08
+INFO:__main__:[log] MACD GC PROB 지표 : 0.28
+INFO:__main__:------
+INFO:__main__:
+INFO:__main__:--1H,6H--short-insight--
+INFO:__main__:[log] RSI_1 지표 : 59.84, 66.61
+INFO:__main__:[log] RSI_2 지표 : 78.55, 74.07
+INFO:__main__:[log] MACD DC PROB 지표 : 1.0
+INFO:__main__:-------
+INFO:__main__:
+INFO:__main__:--6H,1D--short-insight--
+INFO:__main__:[log] RSI_1 지표 : 78.55, 74.07
+INFO:__main__:[log] RSI_2 지표 : 58.4, 59.08
+INFO:__main__:[log] MACD DC PROB 지표 : 0.72
+INFO:__main__:-------
+INFO:__main__:
+INFO:__main__:[log] 손익비 :1.0344456404735958
+INFO:__main__:[log] 골든크로스 및 데드크로스가 발생하지 않았습니다.
