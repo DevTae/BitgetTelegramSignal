@@ -9,12 +9,14 @@ if __name__ == "__main__":
     # { period : [ limit, milliseconds ] } (limit <= 200)
     supported_period = { "1H" : [ 100, 3600000 ],
                          "6H" : [ 100, 21600000 ],
-                         "1D" : [ 100, 86400000 ] }
+                         "1D" : [ 100, 86400000 ],
+                         "1W" : [ 100, 604800000 ] }
         
     # { period : [ datas, lasttime ] }
     download_format = { "1H" : [ None, None ],
                         "6H" : [ None, None ],
-                        "1D" : [ None, None ] }  
+                        "1D" : [ None, None ],
+                        "1W" : [ None, None ] }  
     
     buy_sell_ticker = "BTCUSDT_UMCBL"
     supported_ticker = { buy_sell_ticker }

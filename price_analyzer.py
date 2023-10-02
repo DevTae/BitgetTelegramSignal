@@ -18,11 +18,21 @@ class price_analyzer(threading.Thread):
         self.datas = {}
 
     # 한 개의 period 에 대한 보조지표 계산하는 함수 
-    def calculate(self, datas):
+    def calculate(self, datas, period):
         datas_ = pd.DataFrame(datas, columns=['time', 'open', 'high', 'low', 'close', 'volume', 'q_volume'])
     
         # 거래량 multiple 계산 방식 구현
         volume_profiles = []
+
+        # period 에 따라 달라지는 거래량 크기에 따라 연산량 최소화 (매물대 계산)
+        if "W" in period:
+            ratio_of_removal = 0.0008
+        elif "D" in period:
+            ratio_of_removal = 0.004
+        elif "H" in period:
+            ratio_of_removal = 0.1
+        else:
+            ratio_of_removal = 0.1
         
         for i in range(len(datas_['time'])):
             volume = datas_['volume'][i]
@@ -41,7 +51,7 @@ class price_analyzer(threading.Thread):
             multiple_of_volume /= sum(multiple_of_volume)
             
             for j in range(len(multiple_of_volume)):
-                for k in range(int(volume * multiple_of_volume[j] / total_div)):
+                for _ in range(int(volume * multiple_of_volume[j] * ratio_of_removal)):
                     volume_profiles.append(low_price + j * div_size)
         
         # KDE 적용
@@ -99,6 +109,17 @@ class price_analyzer(threading.Thread):
         # 필요 없는 열 삭제
         datas_.drop(['price_diff', 'gain', 'loss', 'avg_gain14', 'avg_loss14', 'macd_oscillator', 'macd_min', 'macd_max'], axis=1, inplace=True)
 
+        
+        # test
+        print(period)
+        print("close")
+        print(datas_['close'].iloc[-5:])
+        print("rsi14")
+        print(datas_['rsi14'].iloc[-5:])
+        print("rsi14_ma")
+        print(datas_['rsi14_ma'].iloc[-5:])
+        
+
         return datas_, x[1:], kdes_diff
 
     # 한 Ticker 에 대한 모든 period 분석을 진행하는 함수
@@ -113,12 +134,12 @@ class price_analyzer(threading.Thread):
 
         # 보조지표 계산
         for period in self.download_format.keys():
-            values, x, kdes_diff = self.calculate(datas[period][0]) # datas[period][0] : 데이터, datas[period][1] : 마지막 다운로드 timestamp
+            values, x, kdes_diff = self.calculate(datas[period][0], period) # datas[period][0] : 데이터, datas[period][1] : 마지막 다운로드 timestamp
             datas_.update({period : values})
             kdes_diffs.update({period : (x, kdes_diff)}) # x 값들과 그에 대한 미분값 순서대로 값을 넣음
 
         # 매물대 분석
-        volume_profile_periods = ["1H", "6H", "1D"]
+        volume_profile_periods = ["1H", "6H", "1D", "1W"]
 
         resistance_lines = [] # 저항선
         support_lines = [] # 지지선
@@ -162,7 +183,7 @@ class price_analyzer(threading.Thread):
                     break
 
         # 보조지표 분석
-        target_period = [("1H", "6H"), ("6H", "1D")] # (period, longer_period) --> fractal 개념 활용
+        target_period = [("1H", "6H"), ("6H", "1D"), ("1D", "1W")] # (period, longer_period) --> fractal 개념 활용
         golden_cross_periods = []
         dead_cross_periods = []
 
@@ -180,8 +201,8 @@ class price_analyzer(threading.Thread):
             rsi14_longer_ma_2 = datas_[longer_period]['rsi14_ma'].iloc[-2]
 
             if rsi14_longer_1 > rsi14_longer_ma_1 and rsi14_longer_2 > rsi14_longer_ma_2 and \
-               rsi14_1 > rsi14_ma_1 and rsi14_2 <= rsi14_ma_2 and macd_gc_prob > 0.5:
-                self.logger.info("[log] RSI 지표의 유의미한 골든크로스가 일어났습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
+               rsi14_1 > rsi14_ma_1 and rsi14_2 <= rsi14_ma_2: # and macd_gc_prob > 0.5:
+                self.logger.info("[log] RSI 지표의 골든크로스가 일어났습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
                                  + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_gc_prob, 2)))
                 golden_cross_periods.append(period)
             else:
@@ -206,12 +227,11 @@ class price_analyzer(threading.Thread):
             rsi14_longer_ma_2 = datas_[longer_period]['rsi14_ma'].iloc[-2]
             
             if rsi14_longer_1 < rsi14_longer_ma_1 and rsi14_longer_2 < rsi14_longer_ma_2 and \
-               rsi14_1 < rsi14_ma_1 and rsi14_2 >= rsi14_ma_2 and macd_dc_prob > 0.5:
-                self.logger.info("[log] RSI 지표의 유의미한 데드크로스가 일어났습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
+               rsi14_1 < rsi14_ma_1 and rsi14_2 >= rsi14_ma_2: # and macd_dc_prob > 0.5:
+                self.logger.info("[log] RSI 지표의 데드크로스가 발생하였습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
                                  + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_dc_prob, 2)))
                 dead_cross_periods.append(period)
             else:
-
                 self.logger.info("[log] RSI_1 지표 : " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)))
                 self.logger.info("[log] RSI_2 지표 : " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)))
                 self.logger.info("[log] MACD DC PROB 지표 : " + str(round(macd_dc_prob, 2)))
@@ -239,7 +259,7 @@ class price_analyzer(threading.Thread):
                         loss_profit_ratio = (min(resistance_lines) - now_price) / (now_price - max(support_lines))
                     except:
                         loss_profit_ratio = None
-                    self.logger.info("[log] 손익비 : " + str(loss_profit_ratio))
+                    self.logger.info("[log] 대략적인 손익비 : " + str(loss_profit_ratio))
                     if len(golden_cross_periods) == 0 and len(dead_cross_periods) == 0:
                         self.logger.info("[log] 골든크로스 및 데드크로스가 발생하지 않았습니다.")
                     else:
