@@ -3,9 +3,13 @@ import threading
 import copy
 import pandas as pd
 import numpy as np
+import os
 import time
 import logging
 from scipy.stats import gaussian_kde
+
+import matplotlib
+import matplotlib.pyplot as plt
 
 class price_analyzer(threading.Thread):
     def __init__(self, buy_sell_ticker: str, data_queue: queue.Queue, msg_queue: queue.Queue, download_format: dict, logger: logging):
@@ -125,7 +129,7 @@ class price_analyzer(threading.Thread):
         datas_ = {}
         vp_kdes_diffs = {}
 
-        # 보조지표 계산
+        # 전처리 및 보조지표 계산
         for period in self.download_format.keys():
             values, x, kdes_diff = self.calculate(datas[period][0], period) # datas[period][0] : 데이터, datas[period][1] : 마지막 다운로드 timestamp
             datas_.update({period : values})
@@ -199,7 +203,7 @@ class price_analyzer(threading.Thread):
         return resistance_lines, support_lines
 
 
-    def analyze_indicator_long(self, datas_, target_period):
+    def analyze_indicator_long(self, datas_, target_period, resistance_lines, support_lines):
         now_price = datas_["1H"]['close'].iloc[-1]
 
         # 보조지표 매수 관점 분석 (long)
@@ -217,6 +221,15 @@ class price_analyzer(threading.Thread):
 
             if rsi14_longer_1 > rsi14_longer_ma_1 and rsi14_longer_2 > rsi14_longer_ma_2 and \
                rsi14_1 > rsi14_ma_1 and rsi14_2 <= rsi14_ma_2:
+                png_file_path = self.draw_graph(datas_, period, longer_period, resistance_lines, support_lines)
+                msg = f"[GC Signal] {period}봉 기준 RSI 지표의 골든크로스가 발생하였습니다. 상승에 대비하세요."
+                msg += f"\n\t현재가 : {now_price}"
+                if len(resistance_lines) != 0:
+                    msg += f"\n\t근접한 예상 저항선 : {min(resistance_lines)}"
+                if len(support_lines) != 0:
+                    msg += f"\n\t근접한 예상 지지선 : {max(support_lines)}"
+                self.send_to_telegram_bot(msg, png_file_path)
+
                 self.logger.info("[log] RSI 지표의 골든크로스가 일어났습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
                                  + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_gc_prob, 2)))
             else:
@@ -228,7 +241,7 @@ class price_analyzer(threading.Thread):
             self.logger.info("")
 
 
-    def analyze_indicator_short(self, datas_, target_period):
+    def analyze_indicator_short(self, datas_, target_period, resistance_lines, support_lines):
         now_price = datas_["1H"]['close'].iloc[-1]
 
         # 보조지표 매도 관점 분석 (short)
@@ -246,6 +259,15 @@ class price_analyzer(threading.Thread):
             
             if rsi14_longer_1 < rsi14_longer_ma_1 and rsi14_longer_2 < rsi14_longer_ma_2 and \
                rsi14_1 < rsi14_ma_1 and rsi14_2 >= rsi14_ma_2:
+                png_file_path = self.draw_graph(datas_, period, longer_period, resistance_lines, support_lines)
+                msg = f"[DC Signal] {period}봉 기준 RSI 지표의 데드크로스가 발생하였습니다. 하락에 대비하세요."
+                msg += f"\n\t현재가 : {now_price}"
+                if len(resistance_lines) != 0:
+                    msg += f"\n\t근접한 예상 저항선 : {min(resistance_lines)}"
+                if len(support_lines) != 0:
+                    msg += f"\n\t근접한 예상 지지선 : {max(support_lines)}"
+                self.send_to_telegram_bot(msg, png_file_path)
+                
                 self.logger.info("[log] RSI 지표의 데드크로스가 발생하였습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
                                  + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_dc_prob, 2)))
             else:
@@ -256,12 +278,59 @@ class price_analyzer(threading.Thread):
             self.logger.info("-------")
             self.logger.info("")
 
-    def draw_graph(self):
-        pass
 
-    def send_to_telegram_bot(self):
-        pass 
+    def send_to_telegram_bot(self, msg, png_file_path):
+        self.msg_queue.put({ "text" : msg, "photo" : png_file_path })
+        
 
+    def draw_graph(self, datas_, period, longer_period, resistance_lines, support_lines, debug=False) -> str: # return path of picture
+        matplotlib.use('agg') # 백엔드 사용 / 초반엔 5 분 걸리고, 이후에는 1 분 걸림. (초반 로딩이 오래 걸림)
+
+        fig = plt.figure(figsize=(12,8))
+        x = np.arange(-59, 1)
+
+        # price
+        ax1 = plt.subplot2grid((4,2), (0,0), rowspan=2, fig=fig)
+        ax2 = plt.subplot2grid((4,2), (0,1), rowspan=2, fig=fig)
+        ax1.plot(x, datas_[longer_period]['close'].iloc[-60:], color='black')
+        ax2.plot(x, datas_[period]['close'].iloc[-60:], color='black')
+        plt.title(period)
+
+        # support and resistnace lines
+        for resistance_line  in resistance_lines:
+            ax1.plot(x, [ resistance_line for _ in range(len(x)) ], color='purple')
+            ax2.plot(x, [ resistance_line for _ in range(len(x)) ], color='purple')
+
+        for support_line in support_lines:
+            ax1.plot(x, [ support_line for _ in range(len(x)) ], color='green')
+            ax2.plot(x, [ support_line for _ in range(len(x)) ], color='green')
+
+        # rsi
+        ax3 = plt.subplot2grid((4,2), (2,0), fig=fig)
+        ax4 = plt.subplot2grid((4,2), (2,1), fig=fig)
+        ax3.plot(x, datas_[longer_period]['rsi14'].iloc[-60:], color='black')
+        ax3.plot(x, datas_[longer_period]['rsi14_ma'].iloc[-60:], color='orange')
+        ax4.plot(x, datas_[period]['rsi14'].iloc[-60:], color='black')
+        ax4.plot(x, datas_[period]['rsi14_ma'].iloc[-60:], color='orange')
+
+        # macd
+        ax5 = plt.subplot2grid((4,2), (3,0), fig=fig)
+        ax6 = plt.subplot2grid((4,2), (3,1), fig=fig)
+        ax5.plot(x, datas_[longer_period]['macd'].iloc[-60:], color='black')
+        ax5.plot(x, datas_[longer_period]['macd_ma'].iloc[-60:], color='orange')
+        ax6.plot(x, datas_[period]['macd'].iloc[-60:], color='black')
+        ax6.plot(x, datas_[period]['macd_ma'].iloc[-60:], color='orange')
+
+        current_time = time.strftime("%Y-%m-%d_%H-%M-%S")  # 원하는 포맷으로 지정
+        png_file_path = os.path.join("imgs", f"{current_time}.png")
+
+        plt.savefig(png_file_path, dpi=160)
+
+        if debug is True:
+            plt.show()
+
+        return png_file_path
+    
 
     def run(self):
         while self.running:

@@ -44,7 +44,7 @@ if __name__ == "__main__":
     msg_queue = queue.Queue() # price_analyzer -> telegram_bot
     analyzer = price_analyzer(buy_sell_ticker, data_queue, msg_queue, download_format, logger)
     crawler = data_crawler(data_queue, supported_ticker, supported_period, download_format, logger)
-    bot = telegram_bot(msg_queue, logger)
+    bot = telegram_bot(msg_queue, telegram_api_key, telegram_chat_id, logger)
     analyzer.start()
     crawler.start()
     bot.start()
