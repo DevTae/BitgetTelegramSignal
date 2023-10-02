@@ -8,23 +8,25 @@ import logging
 from scipy.stats import gaussian_kde
 
 class price_analyzer(threading.Thread):
-    def __init__(self, buy_sell_ticker: str, data_queue: queue.Queue, download_format: dict, logger: logging):
+    def __init__(self, buy_sell_ticker: str, data_queue: queue.Queue, msg_queue: queue.Queue, download_format: dict, logger: logging):
         threading.Thread.__init__(self)
         self.buy_sell_ticker = buy_sell_ticker
         self.data_queue = data_queue
+        self.msg_queue = msg_queue
         self.download_format = download_format
         self.logger = logger
         self.running = True
         self.datas = {}
 
+
     # 한 개의 period 에 대한 보조지표 계산하는 함수 
     def calculate(self, datas, period):
         datas_ = pd.DataFrame(datas, columns=['time', 'open', 'high', 'low', 'close', 'volume', 'q_volume'])
     
-        # 거래량 multiple 계산 방식 구현
+        # 매물대 계산을 위하여 거래량 multiple 방식 구현
         volume_profiles = []
 
-        # period 에 따라 달라지는 거래량 크기에 따라 연산량 최소화 (매물대 계산)
+        # 매물대 계산을 위하여 period 에 따라 달라지는 거래량 크기에 따라 연산량 최소화
         if 'W' in period:
             ratio_of_removal = 0.0008
         elif 'D' in period:
@@ -54,30 +56,30 @@ class price_analyzer(threading.Thread):
                 for _ in range(int(volume * multiple_of_volume[j] * ratio_of_removal)):
                     volume_profiles.append(low_price + j * div_size)
         
-        # KDE 적용
+        # 매물대 지표 KDE 적용
         level = 100
         x = np.linspace(min(volume_profiles) - 1, max(volume_profiles) + 1, level)
-        kde = gaussian_kde(volume_profiles)
+        vp_kde = gaussian_kde(volume_profiles)
         
-        # KDE 정규화 적용
-        kdes = []
+        # 매물대 지표 KDE 정규화 적용
+        vp_kdes = []
         
         for i in range(len(x)):
-            kdes.append(kde(x[i]))
+            vp_kdes.append(vp_kde(x[i]))
         
-        kdes = np.array(kdes)
-        kdes -= np.mean(kdes)
-        kdes /= np.std(kdes)
+        vp_kdes = np.array(vp_kdes)
+        vp_kdes -= np.mean(vp_kdes)
+        vp_kdes /= np.std(vp_kdes)
         
-        # 미분 적용 (매물대 분석)
-        kdes_diff = []
+        # 매물대 지표 KDE 미분 적용
+        vp_kdes_diff = []
     
         for i in range(1, len(x)):
-            kdes_diff.append(kde(x[i]) - kde(x[i-1]))
+            vp_kdes_diff.append(vp_kde(x[i]) - vp_kde(x[i-1]))
         
-        kdes_diff = np.array(kdes_diff)
-        kdes_diff -= np.mean(kdes_diff)
-        kdes_diff /= np.std(kdes_diff)
+        vp_kdes_diff = np.array(vp_kdes_diff)
+        vp_kdes_diff -= np.mean(vp_kdes_diff)
+        vp_kdes_diff /= np.std(vp_kdes_diff)
 
         # RSI 상대강도지수 계산
         datas_['price_diff'] = datas_['close'].diff()
@@ -110,7 +112,8 @@ class price_analyzer(threading.Thread):
         # 필요 없는 열 삭제
         datas_.drop(['price_diff', 'gain', 'loss', 'au', 'ad', 'rs', 'macd_oscillator', 'macd_min', 'macd_max'], axis=1, inplace=True)
 
-        return datas_, x[1:], kdes_diff
+        return datas_, x[1:], vp_kdes_diff
+
 
     # 한 Ticker 에 대한 모든 period 분석을 진행하는 함수
     def analyze(self, datas: dict):
@@ -120,13 +123,13 @@ class price_analyzer(threading.Thread):
 
         # 초기변수 설정
         datas_ = {}
-        kdes_diffs = {}
+        vp_kdes_diffs = {}
 
         # 보조지표 계산
         for period in self.download_format.keys():
             values, x, kdes_diff = self.calculate(datas[period][0], period) # datas[period][0] : 데이터, datas[period][1] : 마지막 다운로드 timestamp
             datas_.update({period : values})
-            kdes_diffs.update({period : (x, kdes_diff)}) # x 값들과 그에 대한 미분값 순서대로 값을 넣음
+            vp_kdes_diffs.update({period : (x, kdes_diff)}) # x 값들과 그에 대한 미분값 순서대로 값을 넣음
 
         # 매물대 분석
         volume_profile_periods = ["1H", "6H", "1D", "1W"]
@@ -136,6 +139,27 @@ class price_analyzer(threading.Thread):
         
         now_price = datas_["1H"]['close'].iloc[-1]
         
+        resistance_lines_, support_lines_ = self.analyze_volume_profile(vp_kdes_diffs, now_price, volume_profile_periods)
+
+        resistance_lines += resistance_lines_
+        support_lines += support_lines_
+        
+        # 보조지표 분석
+        target_period = [("1H", "6H"), ("6H", "1D"), ("1D", "1W")] # (period, longer_period) --> fractal 개념 활용
+
+        self.analyze_indicator_long(datas_, target_period, resistance_lines, support_lines)
+        self.analyze_indicator_short(datas_, target_period, resistance_lines, support_lines)
+        
+        # 메모리 누수 방지를 위한 메모리 해제
+        keys_to_delete = list(datas_.keys())
+        for key in keys_to_delete:
+            del datas_[key]
+
+
+    def analyze_volume_profile(self, kdes_diffs, now_price, volume_profile_periods):
+        resistance_lines = []
+        support_lines = []
+
         for volume_profile_period in volume_profile_periods:
             for idx, price in enumerate(kdes_diffs[volume_profile_period][0]):
                 if now_price <= price:
@@ -172,10 +196,11 @@ class price_analyzer(threading.Thread):
                     self.logger.info("")
                     break
 
-        # 보조지표 분석
-        target_period = [("1H", "6H"), ("6H", "1D"), ("1D", "1W")] # (period, longer_period) --> fractal 개념 활용
-        golden_cross_periods = []
-        dead_cross_periods = []
+        return resistance_lines, support_lines
+
+
+    def analyze_indicator_long(self, datas_, target_period):
+        now_price = datas_["1H"]['close'].iloc[-1]
 
         # 보조지표 매수 관점 분석 (long)
         for period, longer_period in target_period:
@@ -191,10 +216,9 @@ class price_analyzer(threading.Thread):
             rsi14_longer_ma_2 = datas_[longer_period]['rsi14_ma'].iloc[-2]
 
             if rsi14_longer_1 > rsi14_longer_ma_1 and rsi14_longer_2 > rsi14_longer_ma_2 and \
-               rsi14_1 > rsi14_ma_1 and rsi14_2 <= rsi14_ma_2: # and macd_gc_prob > 0.5:
+               rsi14_1 > rsi14_ma_1 and rsi14_2 <= rsi14_ma_2:
                 self.logger.info("[log] RSI 지표의 골든크로스가 일어났습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
                                  + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_gc_prob, 2)))
-                golden_cross_periods.append((period, longer_period))
             else:
                 self.logger.info("[log] RSI_1 지표 : " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)))
                 self.logger.info("[log] RSI_2 지표 : " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)))
@@ -202,6 +226,10 @@ class price_analyzer(threading.Thread):
 
             self.logger.info("------")
             self.logger.info("")
+
+
+    def analyze_indicator_short(self, datas_, target_period):
+        now_price = datas_["1H"]['close'].iloc[-1]
 
         # 보조지표 매도 관점 분석 (short)
         for period, longer_period in target_period:
@@ -217,10 +245,9 @@ class price_analyzer(threading.Thread):
             rsi14_longer_ma_2 = datas_[longer_period]['rsi14_ma'].iloc[-2]
             
             if rsi14_longer_1 < rsi14_longer_ma_1 and rsi14_longer_2 < rsi14_longer_ma_2 and \
-               rsi14_1 < rsi14_ma_1 and rsi14_2 >= rsi14_ma_2: # and macd_dc_prob > 0.5:
+               rsi14_1 < rsi14_ma_1 and rsi14_2 >= rsi14_ma_2:
                 self.logger.info("[log] RSI 지표의 데드크로스가 발생하였습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
                                  + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_dc_prob, 2)))
-                dead_cross_periods.append((period, longer_period))
             else:
                 self.logger.info("[log] RSI_1 지표 : " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)))
                 self.logger.info("[log] RSI_2 지표 : " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)))
@@ -229,12 +256,12 @@ class price_analyzer(threading.Thread):
             self.logger.info("-------")
             self.logger.info("")
 
-        # 메모리 누수 방지를 위한 메모리 해제
-        keys_to_delete = list(datas_.keys())
-        for key in keys_to_delete:
-            del datas_[key]
+    def draw_graph(self):
+        pass
 
-        return resistance_lines, support_lines, now_price, golden_cross_periods, dead_cross_periods
+    def send_to_telegram_bot(self):
+        pass 
+
 
     def run(self):
         while self.running:
@@ -244,17 +271,7 @@ class price_analyzer(threading.Thread):
                 self.datas.update({ ticker : copy.deepcopy(download_prices) })
 
                 if ticker == self.buy_sell_ticker:
-                    resistance_lines, support_lines, now_price, golden_cross_periods, dead_cross_periods =  self.analyze(self.datas[ticker]) # 매매를 위한 분석 진행
-                    try:
-                        loss_profit_ratio = (min(resistance_lines) - now_price) / (now_price - max(support_lines))
-                    except:
-                        loss_profit_ratio = None
-                    self.logger.info("[log] 대략적인 손익비 : " + str(loss_profit_ratio))
-                    if len(golden_cross_periods) == 0 and len(dead_cross_periods) == 0:
-                        self.logger.info("[log] 골든크로스 및 데드크로스가 발생하지 않았습니다.")
-                    else:
-                        self.logger.info("[log] 골든크로스 및 데드크로스 : " + str(golden_cross_periods) + ", " + str(dead_cross_periods))
-                        pass # 해당 부분에 텔레그램 알림 기능 부분 추가
+                    self.analyze(self.datas[ticker]) # 매매를 위한 분석 진행
                 else:
                     pass # 시장 분석용 (전체적인 긍정 부정 의견)
                     
