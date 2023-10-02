@@ -25,11 +25,11 @@ class price_analyzer(threading.Thread):
         volume_profiles = []
 
         # period 에 따라 달라지는 거래량 크기에 따라 연산량 최소화 (매물대 계산)
-        if "W" in period:
+        if 'W' in period:
             ratio_of_removal = 0.0008
-        elif "D" in period:
+        elif 'D' in period:
             ratio_of_removal = 0.004
-        elif "H" in period:
+        elif 'H' in period:
             ratio_of_removal = 0.1
         else:
             ratio_of_removal = 0.1
@@ -83,9 +83,10 @@ class price_analyzer(threading.Thread):
         datas_['price_diff'] = datas_['close'].diff()
         datas_['gain'] = datas_['price_diff'].apply(lambda x: x if x > 0 else 0)
         datas_['loss'] = datas_['price_diff'].apply(lambda x: -x if x < 0 else 0)
-        datas_['avg_gain14'] = datas_['gain'].rolling(window=14).mean()
-        datas_['avg_loss14'] = datas_['loss'].rolling(window=14).mean()
-        datas_['rsi14'] = 100 - (100 / (1 + (datas_['avg_gain14'] / datas_['avg_loss14'])))
+        datas_['au'] = datas_['gain'].ewm(com=14-1, min_periods=14).mean()
+        datas_['ad'] = datas_['loss'].ewm(com=14-1, min_periods=14).mean()
+        datas_['rs'] = datas_['au'] / datas_['ad']
+        datas_['rsi14'] = 100 - (100 / (1 + datas_['rs']))
         datas_['rsi14_ma'] = datas_['rsi14'].rolling(window=14).mean()
         
         # MACD 지표 계산
@@ -107,18 +108,7 @@ class price_analyzer(threading.Thread):
                                / (datas_['macd_max'] - datas_['macd_min'])
         
         # 필요 없는 열 삭제
-        datas_.drop(['price_diff', 'gain', 'loss', 'avg_gain14', 'avg_loss14', 'macd_oscillator', 'macd_min', 'macd_max'], axis=1, inplace=True)
-
-        
-        # test
-        print(period)
-        print("close")
-        print(datas_['close'].iloc[-5:])
-        print("rsi14")
-        print(datas_['rsi14'].iloc[-5:])
-        print("rsi14_ma")
-        print(datas_['rsi14_ma'].iloc[-5:])
-        
+        datas_.drop(['price_diff', 'gain', 'loss', 'au', 'ad', 'rs', 'macd_oscillator', 'macd_min', 'macd_max'], axis=1, inplace=True)
 
         return datas_, x[1:], kdes_diff
 
@@ -204,7 +194,7 @@ class price_analyzer(threading.Thread):
                rsi14_1 > rsi14_ma_1 and rsi14_2 <= rsi14_ma_2: # and macd_gc_prob > 0.5:
                 self.logger.info("[log] RSI 지표의 골든크로스가 일어났습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
                                  + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_gc_prob, 2)))
-                golden_cross_periods.append(period)
+                golden_cross_periods.append((period, longer_period))
             else:
                 self.logger.info("[log] RSI_1 지표 : " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)))
                 self.logger.info("[log] RSI_2 지표 : " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)))
@@ -230,7 +220,7 @@ class price_analyzer(threading.Thread):
                rsi14_1 < rsi14_ma_1 and rsi14_2 >= rsi14_ma_2: # and macd_dc_prob > 0.5:
                 self.logger.info("[log] RSI 지표의 데드크로스가 발생하였습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
                                  + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_dc_prob, 2)))
-                dead_cross_periods.append(period)
+                dead_cross_periods.append((period, longer_period))
             else:
                 self.logger.info("[log] RSI_1 지표 : " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)))
                 self.logger.info("[log] RSI_2 지표 : " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)))

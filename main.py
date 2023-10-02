@@ -12,11 +12,11 @@ if __name__ == "__main__":
                          "1D" : [ 100, 86400000 ],
                          "1W" : [ 100, 604800000 ] }
         
-    # { period : [ datas, lasttime ] }
+    # { period : [ datas, lasttime (마지막 캔들) ] }
     download_format = { "1H" : [ None, None ],
                         "6H" : [ None, None ],
                         "1D" : [ None, None ],
-                        "1W" : [ None, None ] }  
+                        "1W" : [ None, None ] }
     
     buy_sell_ticker = "BTCUSDT_UMCBL"
     supported_ticker = { buy_sell_ticker }
