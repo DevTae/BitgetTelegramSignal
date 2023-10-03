@@ -94,6 +94,11 @@ class data_crawler(threading.Thread):
                                                                                         endTime=self.now)
                         self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
 
+                        # 다운로드 데이터의 시간에 문제가 생긴 경우
+                        if self.now - self.downloaded_prices[ticker][period][1] > self.supported_period[period][1]:
+                            self.logger.info("[log] The timestamp of last data is anomaly")
+                            continue
+
                         if self.data_queue is not None:
                             if self.is_all_downloaded(ticker):
                                 self.data_queue.put((self.downloaded_prices.get(ticker), ticker, period)) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
