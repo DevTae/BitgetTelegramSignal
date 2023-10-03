@@ -17,14 +17,33 @@ class price_analyzer(threading.Thread):
         self.buy_sell_ticker = buy_sell_ticker
         self.data_queue = data_queue
         self.msg_queue = msg_queue
-        self.download_format = download_format
+        self.download_format = download_format # { period : [ datas, lasttime (마지막 캔들) ] }
         self.logger = logger
-        self.running = True
         self.datas = {}
 
+        # for caching
+        self.datas_cache = {}
+        self.vp_kdes_diffs_cache = {}
+        self.now_kdes_diffs_cache = {}
+        self.resistance_lines_cache = {}
+        self.support_lines_cache = {}
 
-    # 한 개의 period 에 대한 보조지표 계산하는 함수 
-    def calculate(self, datas, period):
+        # buy_sell_ticker initializing
+        self.datas_cache[buy_sell_ticker] = {}
+        self.vp_kdes_diffs_cache[buy_sell_ticker] = {}
+        self.now_kdes_diffs_cache[buy_sell_ticker] = {}
+        self.resistance_lines_cache[buy_sell_ticker] = {}
+        self.support_lines_cache[buy_sell_ticker] = {}
+
+        self.running = True
+
+
+    # 한 개의 period 에 대한 보조지표 계산하는 함수 (datas : array -> datas_ : pandas.DataFrame)
+    def calculate_indicators(self, datas, period):
+        current_time = time.localtime()
+        formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
+        self.logger.info("[log] calculate_indicators function called : " + str(formatted_time) + " " + str(period))
+
         datas_ = pd.DataFrame(datas, columns=['time', 'open', 'high', 'low', 'close', 'volume', 'q_volume'])
     
         # 매물대 계산을 위하여 거래량 multiple 방식 구현
@@ -119,164 +138,227 @@ class price_analyzer(threading.Thread):
         return datas_, x[1:], vp_kdes_diff
 
 
-    # 한 Ticker 에 대한 모든 period 분석을 진행하는 함수
-    def analyze(self, datas: dict):
+    # 한 Ticker 에 대한 개별 period 분석을 진행하는 함수
+    def fractal_analyze(self, datas: dict, ticker: str, period: str):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
-        self.logger.info("[log] analyze funtion called :" + str(formatted_time))
-
-        # 초기변수 설정
-        datas_ = {}
-        vp_kdes_diffs = {}
+        self.logger.info("[log] fractal_analyze function called : " + str(formatted_time) + " " + str(period))
 
         # 전처리 및 보조지표 계산
-        for period in self.download_format.keys():
-            values, x, kdes_diff = self.calculate(datas[period][0], period) # datas[period][0] : 데이터, datas[period][1] : 마지막 다운로드 timestamp
-            datas_.update({period : values})
-            vp_kdes_diffs.update({period : (x, kdes_diff)}) # x 값들과 그에 대한 미분값 순서대로 값을 넣음
+        for p in self.download_format.keys():
+            if p not in self.datas_cache[ticker].keys() or \
+               p not in self.vp_kdes_diffs_cache[ticker].keys() or \
+               p not in self.resistance_lines_cache[ticker].keys() or \
+               p not in self.support_lines_cache[ticker].keys() or \
+               p == period:
+                # 보조지표 계산
+                values, x, kdes_diff = self.calculate_indicators(datas[p][0], p) # datas[p][0] : 데이터, datas[p][1] : 마지막 다운로드 timestamp
+                self.datas_cache[ticker].update({p : values})
+                self.vp_kdes_diffs_cache[ticker].update({p : (x, kdes_diff)}) # x 값들과 그에 대한 미분값 순서대로 값을 넣음
+                
+                # 매물대 분석
+                now_price = self.datas_cache[ticker][p]['close'].iloc[-1]
+                now_kdes_diff_, resistance_lines_, support_lines_ = self.analyze_volume_profile(self.vp_kdes_diffs_cache[ticker], now_price, p)
 
-        # 매물대 분석
-        volume_profile_periods = ["1H", "6H", "1D", "1W"]
+                # cache 에 저항선 및 지지선 데이터 저장하기
+                self.resistance_lines_cache[ticker].update({p : resistance_lines_}) # array
+                self.support_lines_cache[ticker].update({p : support_lines_}) # array
+                self.now_kdes_diffs_cache[ticker].update({p : now_kdes_diff_ }) # float
 
-        resistance_lines = [] # 저항선
-        support_lines = [] # 지지선
+                # 현재 period 까지 확인이 완료되면 보조지표 분석 진행
+                if p == period:
+                    break
         
-        now_price = datas_["1H"]['close'].iloc[-1]
-        
-        resistance_lines_, support_lines_ = self.analyze_volume_profile(vp_kdes_diffs, now_price, volume_profile_periods)
-
-        resistance_lines += resistance_lines_
-        support_lines += support_lines_
-        
-        # 보조지표 분석
-        target_period = [("1H", "6H"), ("6H", "1D"), ("1D", "1W")] # (period, longer_period) --> fractal 개념 활용
-
-        self.analyze_indicator_long(datas_, target_period, resistance_lines, support_lines)
-        self.analyze_indicator_short(datas_, target_period, resistance_lines, support_lines)
-        
-        # 메모리 누수 방지를 위한 메모리 해제
-        keys_to_delete = list(datas_.keys())
-        for key in keys_to_delete:
-            del datas_[key]
-
-
-    def analyze_volume_profile(self, kdes_diffs, now_price, volume_profile_periods):
+        # period (p >= period) 에 맞는 저항선 및 지지선 데이터 선정
         resistance_lines = []
         support_lines = []
 
-        for volume_profile_period in volume_profile_periods:
-            for idx, price in enumerate(kdes_diffs[volume_profile_period][0]):
-                if now_price <= price:
-                    now_kdes_diff = kdes_diffs[volume_profile_period][1][idx]
+        for p in self.download_format.keys():
+            resistance_lines += self.resistance_lines_cache[ticker][p]
+            support_lines += self.support_lines_cache[ticker][p]
+            if p == period:
+                break
+        
+        # 보조지표 분석, 조건 감시 및 알림 (fractal period set)
+        target_periods = [("1H", "6H"), ("6H", "1D"), ("1D", "1W")] # (period, longer_period)
+        available = False
 
-                    self.logger.info("--" + str(volume_profile_period) + "--")
-                    self.logger.info("[log] 매물대 분석 결과 :" + str(now_kdes_diff))
-                    if now_kdes_diff < 0:
-                        # 목표가 계산
-                        for i in range(len(kdes_diffs[volume_profile_period][1])):
-                            if idx+i >= len(kdes_diffs[volume_profile_period][1]):
-                                self.logger.info("[log] 저항선 설정 불가 : 상단 매물대 분석 불가능")
-                                break
-                            
-                            if kdes_diffs[volume_profile_period][1][idx+i] >= 0:
-                                resistance_line = int(kdes_diffs[volume_profile_period][0][idx+i])
-                                self.logger.info("[log] 저항선 :" + str(resistance_line))
-                                resistance_lines.append(resistance_line)
-                                break
+        for idx, (p, _) in enumerate(target_periods):
+            if p == period:
+                available = True
+                target_period = target_periods[idx]
+                break
 
-                        # 손절가 계산
-                        for i in range(len(kdes_diffs[volume_profile_period][1])):
-                            if idx-i >= len(kdes_diffs[volume_profile_period][1]):
-                                self.logger.info("[log] 지지선 설정 불가 : 하단 매물대 분석 불가능")
-                                break
-                            
-                            if kdes_diffs[volume_profile_period][1][idx-i] >= 0:
-                                support_line = int(kdes_diffs[volume_profile_period][0][idx-i])
-                                self.logger.info("[log] 지지선 :" + str(support_line))
-                                support_lines.append(support_line)
-                                break
-
-                    self.logger.info("------")
-                    self.logger.info("")
-                    break
-
-        return resistance_lines, support_lines
+        if available:
+            self.analyze_indicator_long(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=False)
+            self.analyze_indicator_short(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=False)
+        else:
+            self.logger.info("[log] not available period in analyze_indicator : " + str(period))
 
 
-    def analyze_indicator_long(self, datas_, target_period, resistance_lines, support_lines):
-        now_price = datas_["1H"]['close'].iloc[-1]
+    def analyze_volume_profile(self, kdes_diffs, now_price, volume_profile_period):
+        current_time = time.localtime()
+        formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
+        self.logger.info("[log] analyze_volume_profile function called : " + str(formatted_time) + " " + str(volume_profile_period))
+
+        resistance_lines = []
+        support_lines = []
+        now_kdes_diff = None
+
+        for idx, price in enumerate(kdes_diffs[volume_profile_period][0]):
+            if now_price <= price:
+                now_kdes_diff = np.round(kdes_diffs[volume_profile_period][1][idx], decimals=2)
+                self.logger.info("--" + str(volume_profile_period) + "--")
+                self.logger.info("[log] The result of analyze of volume profile : " + str(now_kdes_diff))
+                if now_kdes_diff < 0:
+                    # 목표가 계산
+                    for i in range(len(kdes_diffs[volume_profile_period][1])):
+                        if idx+i >= len(kdes_diffs[volume_profile_period][1]):
+                            self.logger.info("[log] Resistance line can not be set : disable to analysis upper volume profile")
+                            break
+                        
+                        if kdes_diffs[volume_profile_period][1][idx+i] >= 0:
+                            resistance_line = int(kdes_diffs[volume_profile_period][0][idx+i])
+                            self.logger.info("[log] Resistance Line : " + str(resistance_line))
+                            resistance_lines.append(resistance_line)
+                            break
+                    # 손절가 계산
+                    for i in range(len(kdes_diffs[volume_profile_period][1])):
+                        if idx-i >= len(kdes_diffs[volume_profile_period][1]):
+                            self.logger.info("[log] Support line can not be set : disable to analysis lower volume profile")
+                            break
+                        
+                        if kdes_diffs[volume_profile_period][1][idx-i] >= 0:
+                            support_line = int(kdes_diffs[volume_profile_period][0][idx-i])
+                            self.logger.info("[log] Support line : " + str(support_line))
+                            support_lines.append(support_line)
+                            break
+                self.logger.info("------")
+                self.logger.info("")
+                break
+
+        return now_kdes_diff, resistance_lines, support_lines
+
+
+    def analyze_indicator_long(self, datas_, ticker, target_period, resistance_lines, support_lines, debug=False):
+        current_time = time.localtime()
+        formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
+        self.logger.info("[log] analyze_indicator_long function called : " + str(formatted_time))
+
+        # target_period
+        period, longer_period = target_period
+
+        now_price = datas_[period]['close'].iloc[-1]
 
         # 보조지표 매수 관점 분석 (long)
-        for period, longer_period in target_period:
-            self.logger.info("--" + str(period) + "," + str(longer_period) + "--long-insight--")
-            macd_gc_prob = datas_[period]['macd_gc_prob'].iloc[-1]
-            rsi14_1 = datas_[period]['rsi14'].iloc[-1]
-            rsi14_2 = datas_[period]['rsi14'].iloc[-2]
-            rsi14_ma_1 = datas_[period]['rsi14_ma'].iloc[-1]
-            rsi14_ma_2 = datas_[period]['rsi14_ma'].iloc[-2]
-            rsi14_longer_1 = datas_[longer_period]['rsi14'].iloc[-1]
-            rsi14_longer_2 = datas_[longer_period]['rsi14'].iloc[-2]
-            rsi14_longer_ma_1 = datas_[longer_period]['rsi14_ma'].iloc[-1]
-            rsi14_longer_ma_2 = datas_[longer_period]['rsi14_ma'].iloc[-2]
+        self.logger.info("--" + str(period) + "," + str(longer_period) + "--long-insight--")
+        macd_gc_prob = datas_[period]['macd_gc_prob'].iloc[-1]
+        rsi14_1 = datas_[period]['rsi14'].iloc[-1]
+        rsi14_2 = datas_[period]['rsi14'].iloc[-2]
+        rsi14_ma_1 = datas_[period]['rsi14_ma'].iloc[-1]
+        rsi14_ma_2 = datas_[period]['rsi14_ma'].iloc[-2]
+        rsi14_longer_1 = datas_[longer_period]['rsi14'].iloc[-1]
+        rsi14_longer_2 = datas_[longer_period]['rsi14'].iloc[-2]
+        rsi14_longer_ma_1 = datas_[longer_period]['rsi14_ma'].iloc[-1]
+        rsi14_longer_ma_2 = datas_[longer_period]['rsi14_ma'].iloc[-2]
+        if rsi14_longer_1 > rsi14_longer_ma_1 and rsi14_longer_2 > rsi14_longer_ma_2 and \
+           rsi14_1 > rsi14_ma_1 and rsi14_2 <= rsi14_ma_2 or debug:
+            # 그래프 및 알림 메세지 준비
+            png_file_path = self.draw_graph(datas_, period, longer_period, resistance_lines, support_lines)
+            msg = f"[GC Signal] {period}봉 기준 RSI 지표의 골든크로스가 발생하였습니다. 상승에 대비하세요."
+            
+            # 매물대 미분 수치 제공
+            now_kdes_diff = self.now_kdes_diffs_cache[ticker].get(period)
+            longer_now_kdes_diff = self.now_kdes_diffs_cache[ticker].get(longer_period)
+            if longer_now_kdes_diff != None:
+                msg += f"\n\t{longer_period} 매물대 지표 : {longer_now_kdes_diff}"
+            if now_kdes_diff != None:
+                msg += f"\n\t{period} 매물대 지표 : {now_kdes_diff}"
 
-            if rsi14_longer_1 > rsi14_longer_ma_1 and rsi14_longer_2 > rsi14_longer_ma_2 and \
-               rsi14_1 > rsi14_ma_1 and rsi14_2 <= rsi14_ma_2:
-                png_file_path = self.draw_graph(datas_, period, longer_period, resistance_lines, support_lines)
-                msg = f"[GC Signal] {period}봉 기준 RSI 지표의 골든크로스가 발생하였습니다. 상승에 대비하세요."
-                msg += f"\n\t현재가 : {now_price}"
-                if len(resistance_lines) != 0:
-                    msg += f"\n\t근접한 예상 저항선 : {min(resistance_lines)}"
-                if len(support_lines) != 0:
-                    msg += f"\n\t근접한 예상 지지선 : {max(support_lines)}"
-                self.send_to_telegram_bot(msg, png_file_path)
+            # 현재가, 지지/저항 가격 및 손익비 수치 제공
+            if len(resistance_lines) != 0:
+                msg += f"\n\t예상 저항선 : {min(resistance_lines)}"
+            msg += f"\n\t현재가 : {now_price}"
+            if len(support_lines) != 0:
+                msg += f"\n\t예상 지지선 : {max(support_lines)}"
+            if len(resistance_lines) != 0 and len(support_lines) != 0:
+                try:
+                    msg += f"\n\t예상 손익비 : {round((now_price - min(resistance_lines)) / (max(support_lines) - now_price), 1)}"
+                except:
+                    pass
 
-                self.logger.info("[log] RSI 지표의 골든크로스가 일어났습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
-                                 + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_gc_prob, 2)))
-            else:
-                self.logger.info("[log] RSI_1 지표 : " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)))
-                self.logger.info("[log] RSI_2 지표 : " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)))
-                self.logger.info("[log] MACD GC PROB 지표 : " + str(round(macd_gc_prob, 2)))
+            # 정리된 내용 텔레그램으로 전송
+            self.send_to_telegram_bot(msg, png_file_path)
 
-            self.logger.info("------")
-            self.logger.info("")
+            self.logger.info("[log] RSI golden cross occured. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
+                             + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_gc_prob, 2)))
+        else:
+            self.logger.info("[log] RSI_1 indicator : " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)))
+            self.logger.info("[log] RSI_2 indicator : " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)))
+            self.logger.info("[log] MACD GC PROB indicator : " + str(round(macd_gc_prob, 2)))
+        self.logger.info("------")
+        self.logger.info("")
 
 
-    def analyze_indicator_short(self, datas_, target_period, resistance_lines, support_lines):
-        now_price = datas_["1H"]['close'].iloc[-1]
+    def analyze_indicator_short(self, datas_, ticker, target_period, resistance_lines, support_lines, debug=False):
+        current_time = time.localtime()
+        formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
+        self.logger.info("[log] analyze_indicator_short function called : " + str(formatted_time))
+
+        # target_period
+        period, longer_period = target_period
+
+        now_price = datas_[target_period[0]]['close'].iloc[-1]
 
         # 보조지표 매도 관점 분석 (short)
-        for period, longer_period in target_period:
-            self.logger.info("--" + str(period) + "," + str(longer_period) + "--short-insight--")
-            macd_dc_prob = datas_[period]['macd_dc_prob'].iloc[-1]
-            rsi14_1 = datas_[period]['rsi14'].iloc[-1]
-            rsi14_2 = datas_[period]['rsi14'].iloc[-2]
-            rsi14_ma_1 = datas_[period]['rsi14_ma'].iloc[-1]
-            rsi14_ma_2 = datas_[period]['rsi14_ma'].iloc[-2]
-            rsi14_longer_1 = datas_[longer_period]['rsi14'].iloc[-1]
-            rsi14_longer_2 = datas_[longer_period]['rsi14'].iloc[-2]
-            rsi14_longer_ma_1 = datas_[longer_period]['rsi14_ma'].iloc[-1]
-            rsi14_longer_ma_2 = datas_[longer_period]['rsi14_ma'].iloc[-2]
-            
-            if rsi14_longer_1 < rsi14_longer_ma_1 and rsi14_longer_2 < rsi14_longer_ma_2 and \
-               rsi14_1 < rsi14_ma_1 and rsi14_2 >= rsi14_ma_2:
-                png_file_path = self.draw_graph(datas_, period, longer_period, resistance_lines, support_lines)
-                msg = f"[DC Signal] {period}봉 기준 RSI 지표의 데드크로스가 발생하였습니다. 하락에 대비하세요."
-                msg += f"\n\t현재가 : {now_price}"
-                if len(resistance_lines) != 0:
-                    msg += f"\n\t근접한 예상 저항선 : {min(resistance_lines)}"
-                if len(support_lines) != 0:
-                    msg += f"\n\t근접한 예상 지지선 : {max(support_lines)}"
-                self.send_to_telegram_bot(msg, png_file_path)
-                
-                self.logger.info("[log] RSI 지표의 데드크로스가 발생하였습니다. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
-                                 + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_dc_prob, 2)))
-            else:
-                self.logger.info("[log] RSI_1 지표 : " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)))
-                self.logger.info("[log] RSI_2 지표 : " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)))
-                self.logger.info("[log] MACD DC PROB 지표 : " + str(round(macd_dc_prob, 2)))
+        self.logger.info("--" + str(period) + "," + str(longer_period) + "--short-insight--")
+        macd_dc_prob = datas_[period]['macd_dc_prob'].iloc[-1]
+        rsi14_1 = datas_[period]['rsi14'].iloc[-1]
+        rsi14_2 = datas_[period]['rsi14'].iloc[-2]
+        rsi14_ma_1 = datas_[period]['rsi14_ma'].iloc[-1]
+        rsi14_ma_2 = datas_[period]['rsi14_ma'].iloc[-2]
+        rsi14_longer_1 = datas_[longer_period]['rsi14'].iloc[-1]
+        rsi14_longer_2 = datas_[longer_period]['rsi14'].iloc[-2]
+        rsi14_longer_ma_1 = datas_[longer_period]['rsi14_ma'].iloc[-1]
+        rsi14_longer_ma_2 = datas_[longer_period]['rsi14_ma'].iloc[-2]
+        
+        if rsi14_longer_1 < rsi14_longer_ma_1 and rsi14_longer_2 < rsi14_longer_ma_2 and \
+           rsi14_1 < rsi14_ma_1 and rsi14_2 >= rsi14_ma_2 or debug:
+            # 그래프 및 알림 메세지 준비
+            png_file_path = self.draw_graph(datas_, period, longer_period, resistance_lines, support_lines)
+            msg = f"[DC Signal] {period}봉 기준 RSI 지표의 데드크로스가 발생하였습니다. 하락에 대비하세요."
 
-            self.logger.info("-------")
-            self.logger.info("")
+            # 매물대 미분 수치 제공
+            now_kdes_diff = self.now_kdes_diffs_cache[ticker].get(period)
+            longer_now_kdes_diff = self.now_kdes_diffs_cache[ticker].get(longer_period)
+            if longer_now_kdes_diff != None:
+                msg += f"\n\t{longer_period} 매물대 지표 : {longer_now_kdes_diff}"
+            if now_kdes_diff != None:
+                msg += f"\n\t{period} 매물대 지표 : {now_kdes_diff}"
+
+            # 현재가, 지지/저항 가격 및 손익비 수치 제공
+            if len(resistance_lines) != 0:
+                msg += f"\n\t예상 저항선 : {min(resistance_lines)}"
+            msg += f"\n\t현재가 : {now_price}"
+            if len(support_lines) != 0:
+                msg += f"\n\t예상 지지선 : {max(support_lines)}"
+            if len(resistance_lines) != 0 and len(support_lines) != 0:
+                try:
+                    msg += f"\n\t예상 손익비 : {round((now_price - min(resistance_lines)) / (max(support_lines) - now_price), 1)}"
+                except:
+                    pass
+
+            # 정리된 내용 텔레그램으로 전송
+            self.send_to_telegram_bot(msg, png_file_path)
+            
+            self.logger.info("[log] RSI dead cross occured. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
+                             + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_dc_prob, 2)))
+        else:
+            self.logger.info("[log] RSI_1 indicator : " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)))
+            self.logger.info("[log] RSI_2 indicator : " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)))
+            self.logger.info("[log] MACD DC PROB indicator : " + str(round(macd_dc_prob, 2)))
+        self.logger.info("-------")
+        self.logger.info("")
 
 
     def send_to_telegram_bot(self, msg, png_file_path):
@@ -284,6 +366,10 @@ class price_analyzer(threading.Thread):
         
 
     def draw_graph(self, datas_, period, longer_period, resistance_lines, support_lines, debug=False) -> str: # return path of picture
+        current_time = time.localtime()
+        formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
+        self.logger.info("[log] draw_graph function called : " + str(formatted_time))
+
         matplotlib.use('agg') # 백엔드 사용 / 초반엔 5 분 걸리고, 이후에는 1 분 걸림. (초반 로딩이 오래 걸림)
 
         fig = plt.figure(figsize=(12,8))
@@ -296,7 +382,7 @@ class price_analyzer(threading.Thread):
         ax2.plot(x, datas_[period]['close'].iloc[-60:], color='black')
         plt.title(period)
 
-        # support and resistnace lines
+        # support and resistance lines
         for resistance_line  in resistance_lines:
             ax1.plot(x, [ resistance_line for _ in range(len(x)) ], color='purple')
             ax2.plot(x, [ resistance_line for _ in range(len(x)) ], color='purple')
@@ -335,12 +421,12 @@ class price_analyzer(threading.Thread):
     def run(self):
         while self.running:
             if self.data_queue.qsize() > 0:
-                ticker, download_prices = self.data_queue.get()
+                download_prices, ticker, period = self.data_queue.get()
 
                 self.datas.update({ ticker : copy.deepcopy(download_prices) })
 
                 if ticker == self.buy_sell_ticker:
-                    self.analyze(self.datas[ticker]) # 매매를 위한 분석 진행
+                    self.fractal_analyze(self.datas[ticker], ticker, period) # 매매를 위한 분석 진행
                 else:
                     pass # 시장 분석용 (전체적인 긍정 부정 의견)
                     

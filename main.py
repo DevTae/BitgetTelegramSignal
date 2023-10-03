@@ -3,23 +3,25 @@ import logging
 import os
 import time
 
+from collections import OrderedDict
+
 from data_crawler import data_crawler
 from price_analyzer import price_analyzer
 from telegram_bot import telegram_bot
 
 if __name__ == "__main__":
 
-    # { period : [ limit, milliseconds ] } (limit <= 200)
-    supported_period = { "1H" : [ 100, 3600000 ],
-                         "6H" : [ 100, 21600000 ],
-                         "1D" : [ 100, 86400000 ],
-                         "1W" : [ 100, 604800000 ] }
+    # { period : [ limit, milliseconds ] } (limit <= 200) (역순으로 정렬)
+    supported_period = OrderedDict({ "1W" : [ 100, 604800000 ],
+                                     "1D" : [ 100, 86400000 ],
+                                     "6H" : [ 100, 21600000 ],
+                                     "1H" : [ 100, 3600000 ] })
         
     # { period : [ datas, lasttime (마지막 캔들) ] }
-    download_format = { "1H" : [ None, None ],
-                        "6H" : [ None, None ],
-                        "1D" : [ None, None ],
-                        "1W" : [ None, None ] }
+    download_format = OrderedDict({ "1W" : [ None, None ],
+                                    "1D" : [ None, None ],
+                                    "6H" : [ None, None ],
+                                    "1H" : [ None, None ] })
     
     # Ticker 설정
     buy_sell_ticker = "BTCUSDT_UMCBL" # 매수 및 매도 신호 대상 종목
@@ -57,7 +59,7 @@ if __name__ == "__main__":
     bot.start()
 
     while True:
-        line = str(input("Enter the 'q' if you wanna quit .. : "))
+        line = str(input("Enter the 'q' if you wanna quit ..\n"))
         if line == "q":
             analyzer.stop()
             crawler.stop()

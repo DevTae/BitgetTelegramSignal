@@ -14,14 +14,15 @@ class data_crawler(threading.Thread):
         self.supported_period = supported_period
         self.download_format = download_format
         self.logger = logger
+
+        self.limit_per_sec = 20
+        self.running = True
+        self.data_queue = data_queue
+        self.debug = False
         
         # { ticker : download_format }
         self.downloaded_prices = {}
         
-        self.limit_per_sec = 20
-        self.running = True
-        self.data_queue = data_queue
-
         for idx, ticker in enumerate(self.supported_ticker):
             self.downloaded_prices.update({ ticker : copy.deepcopy(self.download_format) })
 
@@ -33,9 +34,14 @@ class data_crawler(threading.Thread):
                                                                                 endTime=self.now)
                 self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
 
+                if self.debug: # debug mode 일 때 다음 다운로드를 바로 다운로드 받도록 timestamp 수정
+                    self.logger.info("[log] self.debug is True")
+                    self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) - self.supported_period[period][0] * self.supported_period[period][1]
+                    time.sleep(2)
+
                 if self.data_queue is not None:
                     if self.is_all_downloaded(ticker):
-                        self.data_queue.put((ticker, self.downloaded_prices.get(ticker))) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
+                        self.data_queue.put((self.downloaded_prices.get(ticker), ticker, period)) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
 
             if idx < len(self.supported_ticker) - 1:
                 time.sleep(len(self.download_format.keys()) * 1 / self.limit_per_sec)
@@ -82,15 +88,23 @@ class data_crawler(threading.Thread):
                 for period in self.download_format.keys():
                     self.now = int(time.time() * 1000)
                     if self.now - self.downloaded_prices[ticker][period][1] > self.supported_period[period][1]:
-                        self.downloaded_prices[ticker][period][0] = self.download_datas(ticker=ticker, 
-                                                                                        period=period, 
-                                                                                        startTime=self.now - self.supported_period[period][0] * self.supported_period[period][1],
-                                                                                        endTime=self.now)
+                        downloaded_datas = self.download_datas(ticker=ticker, 
+                                                               period=period, 
+                                                               startTime=self.now - self.supported_period[period][0] * self.supported_period[period][1],
+                                                               endTime=self.now)
+                        
+                        # 다운로드 데이터의 시간에 문제가 생긴 경우
+                        if self.now - downloaded_datas[-1][0] > self.supported_period[period][1]:
+                            self.logger.info("[log] The timestamp of last data is anomaly. it would retry. " + str(ticker) + " " + str(period))
+                            time.sleep(1) # 1 초 sleep
+                            continue
+
+                        self.downloaded_prices[ticker][period][0] = downloaded_datas
                         self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
 
                         if self.data_queue is not None:
                             if self.is_all_downloaded(ticker):
-                                self.data_queue.put((ticker, self.downloaded_prices.get(ticker))) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
+                                self.data_queue.put((self.downloaded_prices.get(ticker), ticker, period)) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
 
                 if idx < len(self.supported_ticker) - 1:
                     time.sleep(len(self.download_format.keys()) * 1 / self.limit_per_sec)
