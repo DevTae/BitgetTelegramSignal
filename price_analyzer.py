@@ -24,12 +24,14 @@ class price_analyzer(threading.Thread):
         # for caching
         self.datas_cache = {}
         self.vp_kdes_diffs_cache = {}
+        self.now_kdes_diffs_cache = {}
         self.resistance_lines_cache = {}
         self.support_lines_cache = {}
 
         # buy_sell_ticker initializing
         self.datas_cache[buy_sell_ticker] = {}
         self.vp_kdes_diffs_cache[buy_sell_ticker] = {}
+        self.now_kdes_diffs_cache[buy_sell_ticker] = {}
         self.resistance_lines_cache[buy_sell_ticker] = {}
         self.support_lines_cache[buy_sell_ticker] = {}
 
@@ -156,11 +158,12 @@ class price_analyzer(threading.Thread):
                 
                 # 매물대 분석
                 now_price = self.datas_cache[ticker][p]['close'].iloc[-1]
-                resistance_lines_, support_lines_ = self.analyze_volume_profile(self.vp_kdes_diffs_cache[ticker], now_price, p)
+                now_kdes_diff_, resistance_lines_, support_lines_ = self.analyze_volume_profile(self.vp_kdes_diffs_cache[ticker], now_price, p)
 
                 # cache 에 저항선 및 지지선 데이터 저장하기
-                self.resistance_lines_cache[ticker].update({p : resistance_lines_})
-                self.support_lines_cache[ticker].update({p : support_lines_})
+                self.resistance_lines_cache[ticker].update({p : resistance_lines_}) # array
+                self.support_lines_cache[ticker].update({p : support_lines_}) # array
+                self.now_kdes_diffs_cache[ticker].update({p : now_kdes_diff_ }) # float
 
                 # 현재 period 까지 확인이 완료되면 보조지표 분석 진행
                 if p == period:
@@ -187,8 +190,8 @@ class price_analyzer(threading.Thread):
                 break
 
         if available:
-            self.analyze_indicator_long(self.datas_cache[ticker], target_period, resistance_lines, support_lines, debug=False)
-            self.analyze_indicator_short(self.datas_cache[ticker], target_period, resistance_lines, support_lines, debug=False)
+            self.analyze_indicator_long(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=False)
+            self.analyze_indicator_short(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=True)
         else:
             self.logger.info("[log] not available period in analyze_indicator : " + str(period))
 
@@ -200,10 +203,11 @@ class price_analyzer(threading.Thread):
 
         resistance_lines = []
         support_lines = []
+        now_kdes_diff = None
 
         for idx, price in enumerate(kdes_diffs[volume_profile_period][0]):
             if now_price <= price:
-                now_kdes_diff = kdes_diffs[volume_profile_period][1][idx]
+                now_kdes_diff = np.round(kdes_diffs[volume_profile_period][1][idx], decimals=2)
                 self.logger.info("--" + str(volume_profile_period) + "--")
                 self.logger.info("[log] The result of analyze of volume profile : " + str(now_kdes_diff))
                 if now_kdes_diff < 0:
@@ -233,10 +237,10 @@ class price_analyzer(threading.Thread):
                 self.logger.info("")
                 break
 
-        return resistance_lines, support_lines
+        return now_kdes_diff, resistance_lines, support_lines
 
 
-    def analyze_indicator_long(self, datas_, target_period, resistance_lines, support_lines, debug=False):
+    def analyze_indicator_long(self, datas_, ticker, target_period, resistance_lines, support_lines, debug=False):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] analyze_indicator_long function called : " + str(formatted_time))
@@ -259,14 +263,33 @@ class price_analyzer(threading.Thread):
         rsi14_longer_ma_2 = datas_[longer_period]['rsi14_ma'].iloc[-2]
         if rsi14_longer_1 > rsi14_longer_ma_1 and rsi14_longer_2 > rsi14_longer_ma_2 and \
            rsi14_1 > rsi14_ma_1 and rsi14_2 <= rsi14_ma_2 or debug:
+            # 그래프 및 알림 메세지 준비
             png_file_path = self.draw_graph(datas_, period, longer_period, resistance_lines, support_lines)
             msg = f"[GC Signal] {period}봉 기준 RSI 지표의 골든크로스가 발생하였습니다. 상승에 대비하세요."
-            msg += f"\n\t현재가 : {now_price}"
+            
+            # 매물대 미분 수치 제공
+            now_kdes_diff = self.now_kdes_diffs_cache[ticker].get(period)
+            longer_now_kdes_diff = self.now_kdes_diffs_cache[ticker].get(longer_period)
+            if longer_now_kdes_diff != None:
+                msg += f"\n\t{longer_period} 매물대 지표 : {longer_now_kdes_diff}"
+            if now_kdes_diff != None:
+                msg += f"\n\t{period} 매물대 지표 : {now_kdes_diff}"
+
+            # 현재가, 지지/저항 가격 및 손익비 수치 제공
             if len(resistance_lines) != 0:
-                msg += f"\n\t근접한 예상 저항선 : {min(resistance_lines)}"
+                msg += f"\n\t예상 저항선 : {min(resistance_lines)}"
+            msg += f"\n\t현재가 : {now_price}"
             if len(support_lines) != 0:
-                msg += f"\n\t근접한 예상 지지선 : {max(support_lines)}"
+                msg += f"\n\t예상 지지선 : {max(support_lines)}"
+            if len(resistance_lines) != 0 and len(support_lines) != 0:
+                try:
+                    msg += f"\n\t예상 손익비 : {round((now_price - min(resistance_lines)) / (max(support_lines) - now_price), 1)}"
+                except:
+                    pass
+
+            # 정리된 내용 텔레그램으로 전송
             self.send_to_telegram_bot(msg, png_file_path)
+
             self.logger.info("[log] RSI golden cross occured. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
                              + ", " + str(round(rsi14_longer_1, 2)) + ", " + str(round(rsi14_longer_ma_1, 2)) + ", " + str(round(macd_gc_prob, 2)))
         else:
@@ -277,7 +300,7 @@ class price_analyzer(threading.Thread):
         self.logger.info("")
 
 
-    def analyze_indicator_short(self, datas_, target_period, resistance_lines, support_lines, debug=False):
+    def analyze_indicator_short(self, datas_, ticker, target_period, resistance_lines, support_lines, debug=False):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] analyze_indicator_short function called : " + str(formatted_time))
@@ -301,13 +324,31 @@ class price_analyzer(threading.Thread):
         
         if rsi14_longer_1 < rsi14_longer_ma_1 and rsi14_longer_2 < rsi14_longer_ma_2 and \
            rsi14_1 < rsi14_ma_1 and rsi14_2 >= rsi14_ma_2 or debug:
+            # 그래프 및 알림 메세지 준비
             png_file_path = self.draw_graph(datas_, period, longer_period, resistance_lines, support_lines)
             msg = f"[DC Signal] {period}봉 기준 RSI 지표의 데드크로스가 발생하였습니다. 하락에 대비하세요."
-            msg += f"\n\t현재가 : {now_price}"
+
+            # 매물대 미분 수치 제공
+            now_kdes_diff = self.now_kdes_diffs_cache[ticker].get(period)
+            longer_now_kdes_diff = self.now_kdes_diffs_cache[ticker].get(longer_period)
+            if longer_now_kdes_diff != None:
+                msg += f"\n\t{longer_period} 매물대 지표 : {longer_now_kdes_diff}"
+            if now_kdes_diff != None:
+                msg += f"\n\t{period} 매물대 지표 : {now_kdes_diff}"
+
+            # 현재가, 지지/저항 가격 및 손익비 수치 제공
             if len(resistance_lines) != 0:
-                msg += f"\n\t근접한 예상 저항선 : {min(resistance_lines)}"
+                msg += f"\n\t예상 저항선 : {min(resistance_lines)}"
+            msg += f"\n\t현재가 : {now_price}"
             if len(support_lines) != 0:
-                msg += f"\n\t근접한 예상 지지선 : {max(support_lines)}"
+                msg += f"\n\t예상 지지선 : {max(support_lines)}"
+            if len(resistance_lines) != 0 and len(support_lines) != 0:
+                try:
+                    msg += f"\n\t예상 손익비 : {round((now_price - min(resistance_lines)) / (max(support_lines) - now_price), 1)}"
+                except:
+                    pass
+
+            # 정리된 내용 텔레그램으로 전송
             self.send_to_telegram_bot(msg, png_file_path)
             
             self.logger.info("[log] RSI dead cross occured. " + str(round(rsi14_1, 2)) + ", " + str(round(rsi14_ma_1, 2)) \
