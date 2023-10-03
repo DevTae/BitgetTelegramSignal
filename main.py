@@ -1,6 +1,7 @@
 import queue
 import logging
 import os
+import time
 
 from data_crawler import data_crawler
 from price_analyzer import price_analyzer
@@ -28,17 +29,23 @@ if __name__ == "__main__":
     telegram_api_key = "6436954798:AAGlQvHCA6mwYtr3AXZdY5klRCz0byNPeXU"
     telegram_chat_id = "-1001691110767"
 
+    # imgs 폴더 설정
+    imgs_folder_path = "imgs"
+    if not os.path.exists(imgs_folder_path):
+        os.makedirs(imgs_folder_path)
+
+    # logs 폴더 설정
+    logs_folder_path = "logs"
+    if not os.path.exists(logs_folder_path):
+        os.makedirs(logs_folder_path)
+
     # log 설정
-    logging.basicConfig(filename='main.log', level=logging.INFO)
+    current_time = time.strftime("%Y-%m-%d_%H-%M-%S")  # 원하는 포맷으로 지정
+    logging.basicConfig(filename=os.path.join(logs_folder_path, f'{current_time}.log'), level=logging.INFO)
     logger = logging.getLogger(__name__)
     stream_handler = logging.StreamHandler()
     logger.addHandler(stream_handler)
-
-    # imgs 폴더 설정
-    folder_path = "imgs"
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-
+    
     # 프로그램 스레드 생성
     data_queue = queue.Queue() # data_crawler -> price_analyzer
     msg_queue = queue.Queue() # price_analyzer -> telegram_bot

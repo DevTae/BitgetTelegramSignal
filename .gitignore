@@ -1,2 +1,2 @@
-main.log
-imgs/
+logs/*.log
+imgs/*.png
