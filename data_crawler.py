@@ -95,7 +95,8 @@ class data_crawler(threading.Thread):
                         
                         # 다운로드 데이터의 시간에 문제가 생긴 경우
                         if self.now - downloaded_datas[-1][0] > self.supported_period[period][1]:
-                            self.logger.info("[log] The timestamp of last data is anomaly. it would retry. " + str(ticker) + " " + str(period))
+                            self.logger.info("[log] The timestamp of last data is anomaly. it would retry. " \
+                                              + str(ticker) + " " + str(period) + " " + str(self.now) + " " + str(downloaded_datas[-1][0]))
                             time.sleep(1) # 1 초 sleep
                             continue
 
