@@ -256,6 +256,9 @@ class price_analyzer(threading.Thread):
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] analyze_indicator_long function called : " + str(formatted_time))
 
+        if debug is True:
+            self.logger.info("[log] debug is True")
+
         # target_period
         period, longer_period = target_period
 
@@ -315,6 +318,9 @@ class price_analyzer(threading.Thread):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] analyze_indicator_short function called : " + str(formatted_time))
+
+        if debug is True:
+            self.logger.info("[log] debug is True")
 
         # target_period
         period, longer_period = target_period

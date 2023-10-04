@@ -40,8 +40,8 @@ class data_crawler(threading.Thread):
                     time.sleep(2)
 
                 if self.data_queue is not None:
-                    if self.is_all_downloaded(ticker):
-                        self.data_queue.put((self.downloaded_prices.get(ticker), ticker, period)) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
+                    #if self.is_all_downloaded(ticker):
+                    self.data_queue.put((self.downloaded_prices.get(ticker), ticker, period)) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
 
             if idx < len(self.supported_ticker) - 1:
                 time.sleep(len(self.download_format.keys()) * 1 / self.limit_per_sec)
@@ -104,8 +104,8 @@ class data_crawler(threading.Thread):
                         self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
 
                         if self.data_queue is not None:
-                            if self.is_all_downloaded(ticker):
-                                self.data_queue.put((self.downloaded_prices.get(ticker), ticker, period)) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
+                            #if self.is_all_downloaded(ticker):
+                            self.data_queue.put((self.downloaded_prices.get(ticker), ticker, period)) # 가격 분석 업데이트가 필요할 때마다 price_analyzer 로 넘겨줌
 
                 if idx < len(self.supported_ticker) - 1:
                     time.sleep(len(self.download_format.keys()) * 1 / self.limit_per_sec)
