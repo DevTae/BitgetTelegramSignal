@@ -68,16 +68,22 @@ class price_analyzer(threading.Thread):
             center_price = (open_price + high_price + low_price + close_price) / 4
             
             total_div = 10
-            div_size = (high_price - low_price) / total_div
-            index_pivot = (center_price - low_price) // div_size
-            index_pivot = max(min(index_pivot, total_div - 1), 1) # 시고저종 가격을 바탕으로 중심값 선정
-            multiple_of_volume = np.array(list(np.linspace(1, 0, int(index_pivot))) \
-                                        + list(np.linspace(0, 1, int(total_div - index_pivot + 1))[1:]))
-            multiple_of_volume /= sum(multiple_of_volume)
-            
-            for j in range(len(multiple_of_volume)):
-                for _ in range(int(volume * multiple_of_volume[j] * ratio_of_removal)):
-                    volume_profiles.append(low_price + j * div_size)
+
+            try:
+                div_size = (high_price - low_price) / total_div
+                index_pivot = (center_price - low_price) // div_size
+                index_pivot = max(min(index_pivot, total_div - 1), 1) # 시고저종 가격을 바탕으로 중심값 선정
+                multiple_of_volume = np.array(list(np.linspace(1, 0, int(index_pivot))) \
+                                            + list(np.linspace(0, 1, int(total_div - index_pivot + 1))[1:]))
+                multiple_of_volume /= sum(multiple_of_volume)
+
+                for j in range(len(multiple_of_volume)):
+                    for _ in range(int(volume * multiple_of_volume[j] * ratio_of_removal)):
+                        volume_profiles.append(low_price + j * div_size)
+            except: # 에러 발생 시 
+                self.logger.info("[log] calculate_indicators function handles exception : " + str(formatted_time) + " " + str(period))
+                for _ in range(int(volume * ratio_of_removal)):
+                    volume_profiles.append(center_price)
         
         # 매물대 지표 KDE 적용
         level = 100
