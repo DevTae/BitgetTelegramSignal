@@ -12,10 +12,10 @@ from telegram_bot import telegram_bot
 if __name__ == "__main__":
 
     # { period : [ limit, milliseconds ] } (limit <= 200) (역순으로 정렬)
-    supported_period = OrderedDict({ "1W" : [ 100, 604800000 ],
-                                     "1D" : [ 100, 86400000 ],
-                                     "6H" : [ 100, 21600000 ],
-                                     "1H" : [ 100, 3600000 ] })
+    supported_period = OrderedDict({ "1W" : [ 120, 604800000 ],
+                                     "1D" : [ 120, 86400000 ],
+                                     "6H" : [ 120, 21600000 ],
+                                     "1H" : [ 120, 3600000 ] })
         
     # { period : [ datas, lasttime (마지막 캔들) ] }
     download_format = OrderedDict({ "1W" : [ None, None ],
