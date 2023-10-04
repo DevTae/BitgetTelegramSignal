@@ -201,7 +201,7 @@ class price_analyzer(threading.Thread):
                 break
 
         if available:
-            self.analyze_indicator_long(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=True)
+            self.analyze_indicator_long(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=False)
             self.analyze_indicator_short(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=False)
         else:
             self.logger.info("[log] not available period in analyze_indicator : " + str(period))
