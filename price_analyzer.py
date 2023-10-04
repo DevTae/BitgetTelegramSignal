@@ -119,6 +119,11 @@ class price_analyzer(threading.Thread):
         datas_['rs'] = datas_['au'] / datas_['ad']
         datas_['rsi14'] = 100 - (100 / (1 + datas_['rs']))
         datas_['rsi14_ma'] = datas_['rsi14'].rolling(window=14).mean()
+
+        # 지수 이동평균선 계산
+        datas_['ema5'] = datas_['close'].ewm(span=5).mean()
+        datas_['ema20'] = datas_['close'].ewm(span=20).mean()
+        datas_['ema60'] = datas_['close'].ewm(span=60).mean()
         
         # MACD 지표 계산
         datas_['ema12'] = datas_['close'].ewm(span=12).mean()
@@ -251,6 +256,9 @@ class price_analyzer(threading.Thread):
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] analyze_indicator_long function called : " + str(formatted_time))
 
+        if debug is True:
+            self.logger.info("[log] debug is True")
+
         # target_period
         period, longer_period = target_period
 
@@ -310,6 +318,9 @@ class price_analyzer(threading.Thread):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] analyze_indicator_short function called : " + str(formatted_time))
+
+        if debug is True:
+            self.logger.info("[log] debug is True")
 
         # target_period
         period, longer_period = target_period
@@ -381,21 +392,30 @@ class price_analyzer(threading.Thread):
         fig = plt.figure(figsize=(12,8))
         x = np.arange(-59, 1)
 
-        # price
+        # price and ema
         ax1 = plt.subplot2grid((4,2), (0,0), rowspan=2, fig=fig)
         ax2 = plt.subplot2grid((4,2), (0,1), rowspan=2, fig=fig)
+        ax1.set_ylim(min(datas_[longer_period]['close'].iloc[-60:]) * 0.99, max(datas_[longer_period]['close'].iloc[-60:]) * 1.01)
+        ax2.set_ylim(min(datas_[period]['close'].iloc[-60:]) * 0.99, max(datas_[period]['close'].iloc[-60:]) * 1.01)
         ax1.plot(x, datas_[longer_period]['close'].iloc[-60:], color='black')
+        ax1.plot(x, datas_[longer_period]['ema5'].iloc[-60:], color='tomato', alpha=0.4)
+        ax1.plot(x, datas_[longer_period]['ema20'].iloc[-60:], color='gold', alpha=0.4)
+        ax1.plot(x, datas_[longer_period]['ema60'].iloc[-60:], color='green', alpha=0.4)
         ax2.plot(x, datas_[period]['close'].iloc[-60:], color='black')
+        ax2.plot(x, datas_[period]['ema5'].iloc[-60:], color='tomato', alpha=0.4)
+        ax2.plot(x, datas_[period]['ema20'].iloc[-60:], color='gold', alpha=0.4)
+        ax2.plot(x, datas_[period]['ema60'].iloc[-60:], color='green', alpha=0.4)
+        
         plt.title(period)
 
         # support and resistance lines
         for resistance_line  in resistance_lines:
-            ax1.plot(x, [ resistance_line for _ in range(len(x)) ], color='purple')
-            ax2.plot(x, [ resistance_line for _ in range(len(x)) ], color='purple')
+            ax1.plot(x, [ resistance_line for _ in range(len(x)) ], color='black', alpha=0.6)
+            ax2.plot(x, [ resistance_line for _ in range(len(x)) ], color='black', alpha=0.6)
 
         for support_line in support_lines:
-            ax1.plot(x, [ support_line for _ in range(len(x)) ], color='green')
-            ax2.plot(x, [ support_line for _ in range(len(x)) ], color='green')
+            ax1.plot(x, [ support_line for _ in range(len(x)) ], color='black', alpha=0.6)
+            ax2.plot(x, [ support_line for _ in range(len(x)) ], color='black', alpha=0.6)
 
         # rsi
         ax3 = plt.subplot2grid((4,2), (2,0), fig=fig)
