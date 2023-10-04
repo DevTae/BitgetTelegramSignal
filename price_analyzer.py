@@ -389,8 +389,8 @@ class price_analyzer(threading.Thread):
         # price and ema
         ax1 = plt.subplot2grid((4,2), (0,0), rowspan=2, fig=fig)
         ax2 = plt.subplot2grid((4,2), (0,1), rowspan=2, fig=fig)
-        ax1.set_ylim(min(datas_[longer_period]['close'].iloc[-60:]) * 0.95, max(datas_[longer_period]['close'].iloc[-60:]) * 1.05)
-        ax2.set_ylim(min(datas_[period]['close'].iloc[-60:]) * 0.95, max(datas_[period]['close'].iloc[-60:]) * 1.05)
+        ax1.set_ylim(min(datas_[longer_period]['close'].iloc[-60:]) * 0.99, max(datas_[longer_period]['close'].iloc[-60:]) * 1.01)
+        ax2.set_ylim(min(datas_[period]['close'].iloc[-60:]) * 0.99, max(datas_[period]['close'].iloc[-60:]) * 1.01)
         ax1.plot(x, datas_[longer_period]['close'].iloc[-60:], color='black')
         ax1.plot(x, datas_[longer_period]['ema5'].iloc[-60:], color='tomato', alpha=0.4)
         ax1.plot(x, datas_[longer_period]['ema20'].iloc[-60:], color='gold', alpha=0.4)
