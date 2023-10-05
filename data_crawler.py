@@ -28,15 +28,16 @@ class data_crawler(threading.Thread):
 
             for period in self.download_format.keys():
                 self.now = int(time.time() * 1000)
-                self.downloaded_prices[ticker][period][0] = self.download_datas(ticker=ticker, 
-                                                                                period=period, 
-                                                                                startTime=self.now - self.supported_period[period][0] * self.supported_period[period][1],
-                                                                                endTime=self.now)
-                self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
+                downloaded_datas = self.download_datas(ticker=ticker, 
+                                                       period=period, 
+                                                       startTime=self.now - self.supported_period[period][0] * self.supported_period[period][1],
+                                                       endTime=self.now)
+                self.downloaded_prices[ticker][period][0] = downloaded_datas[:-1] # 완성된 봉 데이터까지만 넘겨줌
+                self.downloaded_prices[ticker][period][1] = int(downloaded_datas[-1][0]) # 시간 갱신 (마지막 타임스탬프)
 
                 if self.debug: # debug mode 일 때 다음 다운로드를 바로 다운로드 받도록 timestamp 수정
                     self.logger.info("[log] self.debug is True")
-                    self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) - self.supported_period[period][0] * self.supported_period[period][1]
+                    self.downloaded_prices[ticker][period][1] = int(downloaded_datas[-1][0]) - self.supported_period[period][0] * self.supported_period[period][1]
                     time.sleep(2)
 
                 if self.data_queue is not None:
@@ -100,8 +101,8 @@ class data_crawler(threading.Thread):
                             time.sleep(1) # 1 초 sleep
                             continue
 
-                        self.downloaded_prices[ticker][period][0] = downloaded_datas
-                        self.downloaded_prices[ticker][period][1] = int(self.downloaded_prices[ticker][period][0][-1][0]) # 시간 갱신 (마지막 타임스탬프)
+                        self.downloaded_prices[ticker][period][0] = downloaded_datas[:-1] # 완성된 봉 데이터까지만 넘겨줌
+                        self.downloaded_prices[ticker][period][1] = int(downloaded_datas[-1][0]) # 시간 갱신 (마지막 타임스탬프)
 
                         if self.data_queue is not None:
                             #if self.is_all_downloaded(ticker):
