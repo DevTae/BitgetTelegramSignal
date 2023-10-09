@@ -60,7 +60,7 @@ class data_crawler(threading.Thread):
         #url = f"https://api.bitget.com/api/mix/v1/market/history-candles?symbol={ticker}&granularity={period}&startTime={startTime}&endTime={endTime}" # for backtesting
         url = f"https://api.bitget.com/api/mix/v1/market/candles?symbol={ticker}&granularity={period}&startTime={startTime}&endTime={endTime}"
 
-        while True:
+        while self.running:
             response = requests.get(url)
             if response.status_code == 200:
                 if self.logger != None:
