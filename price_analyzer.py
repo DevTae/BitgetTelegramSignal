@@ -57,7 +57,7 @@ class price_analyzer(threading.Thread):
         elif 'H' in period:
             ratio_of_removal = 0.1
         else:
-            ratio_of_removal = 0.1
+            ratio_of_removal = 1
         
         for i in range(len(datas_['time'])):
             volume = datas_['volume'][i]
