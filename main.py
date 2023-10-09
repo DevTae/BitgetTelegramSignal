@@ -11,13 +11,14 @@ from telegram_bot import telegram_bot
 
 if __name__ == "__main__":
     
-    # { period : [ datas, lasttime (마지막 캔들), download_cycle ] }
-    download_format = OrderedDict({ "1D" : [ None, None, 86400000 ],
-                                    "6H" : [ None, None, 21600000 ],
-                                    "1H" : [ None, None, 3600000 ],
-                                    "15m" : [ None, None, 900000 ],
-                                    "3m" : [ None, None, 180000 ],
-                                    "1m" : [ None, None, 60000 ] })
+    # { period : [ datas, lasttime (마지막 캔들), per_time, download_cycle ] }
+    download_format = OrderedDict({ "1W" : [ None, None, 604800000, 1 ], 
+                                    "1D" : [ None, None, 86400000, 1 ],
+                                    "6H" : [ None, None, 21600000, 1 ],
+                                    "1H" : [ None, None, 3600000, 1 ],
+                                    "15m" : [ None, None, 900000, 1 ],
+                                    "3m" : [ None, None, 180000, 1 ],
+                                    "1m" : [ None, None, 60000, 1 ] }) # 1m 에 대한 데이터를 계속해서 갱신 시도
     
     download_candle = 100 # limit <= 200
     
