@@ -17,7 +17,7 @@ class price_analyzer(threading.Thread):
         self.buy_sell_ticker = buy_sell_ticker
         self.data_queue = data_queue
         self.msg_queue = msg_queue
-        self.download_format = download_format # { period : [ datas, lasttime (마지막 캔들) ] }
+        self.download_format = download_format # { period : [ datas, lasttime (마지막 캔들), download_cycle ] }
         self.logger = logger
         self.datas = {}
 
@@ -38,8 +38,8 @@ class price_analyzer(threading.Thread):
         self.running = True
 
 
-    # 한 개의 period 에 대한 보조지표 계산하는 함수 (datas : array -> datas_ : pandas.DataFrame)
-    def calculate_indicators(self, datas, period):
+    # 한 개의 period 에 대한 보조지표 및 매물대 지표 계산하는 함수 (datas : array -> datas_ : pandas.DataFrame)
+    def calculate_indicators(self, datas: list, period: str):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] calculate_indicators function called : " + str(formatted_time) + " " + str(period))
@@ -56,7 +56,7 @@ class price_analyzer(threading.Thread):
             ratio_of_removal = 0.004
         elif 'H' in period:
             ratio_of_removal = 0.1
-        else:
+        else: # case 'm'
             ratio_of_removal = 1
         
         for i in range(len(datas_['time'])):
@@ -132,6 +132,7 @@ class price_analyzer(threading.Thread):
         datas_['macd_ma'] = datas_['macd'].rolling(window=9).mean()
         datas_['macd_oscillator'] = datas_['macd'] - datas_['macd_ma']
         
+        """
         # MACD Osillator 골든크로스 확률 계산 (대략적인)
         datas_['macd_min'] = datas_['macd_oscillator'].rolling(window=9).min()
         datas_.loc[datas_['macd_min'] > 0, 'macd_min'] = 0
@@ -142,44 +143,69 @@ class price_analyzer(threading.Thread):
                                / (datas_['macd_max'] - datas_['macd_min'])
         datas_['macd_dc_prob'] = (datas_['macd_max'] - datas_['macd_oscillator']) \
                                / (datas_['macd_max'] - datas_['macd_min'])
-        
+        """
+
+        # 이후 calculate_indicators_last_candle 을 위하여 주석 처리 진행
         # 필요 없는 열 삭제
-        datas_.drop(['price_diff', 'gain', 'loss', 'au', 'ad', 'rs', 'macd_oscillator', 'macd_min', 'macd_max'], axis=1, inplace=True)
+        #datas_.drop(['price_diff', 'gain', 'loss', 'au', 'ad', 'rs', 'macd_oscillator'], axis=1, inplace=True)
+        #datas_.drop(['macd_min', 'macd_max'], axis=1, inplace=True)
 
         return datas_, x[1:], vp_kdes_diff
 
+    # 마지막 캔들에 대해서만 업데이트 진행하는 함수 (datas : pd.DataFrame -> datas : pd.DataFrame)
+    def calculate_indicators_last_candle(self, datas: pd.DataFrame, period: str, new_datas: pd.DataFrame, new_period: str):
+        current_time = time.localtime()
+        formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
+        self.logger.info("[log] calculate_indicators_last_candle function called : " + str(formatted_time) + " " + str(period) + " " + str(new_period))
+
+        # 마지막 타임프레임에 대한 데이터 반영
+        datas['high'].iloc[-1] = max(datas['high'].iloc[-1], new_datas['high'].iloc[-1])
+        datas['low'].iloc[-1] = min(datas['low'].iloc[-1], new_datas['low'].iloc[-1])
+        datas['close'].iloc[-1] = new_datas['close'].iloc[-1]
+        datas['volume'].iloc[-1] += new_datas['volume'].iloc[-1]
+
+        # RSI 상대강도지수 계산
+        datas['price_diff'].iloc[-1] = datas['close'].iloc[-1] - datas['close'].iloc[-2]
+        datas['gain'].iloc[-1] = datas['price_diff'].iloc[-1].apply(lambda x: x if x > 0 else 0)
+        datas['loss'].iloc[-1] = datas['price_diff'].iloc[-1].apply(lambda x: -x if x < 0 else 0)
+
+        datas['au'].iloc[-1] = datas['gain'].ewm(com=14-1, min_periods=14).mean().iloc[-1]
+        datas['ad'].iloc[-1] = datas['loss'].ewm(com=14-1, min_periods=14).mean().iloc[-1]
+
+        datas['rs'].iloc[-1] = datas['au'].iloc[-1] / datas['ad'].iloc[-1]
+        datas['rsi14'].iloc[-1] = 100 - (100 / (1 + datas['rs'].iloc[-1]))
+        datas['rsi14_ma'].iloc[-1] = datas['rsi14'].rolling(window=14).mean().iloc[-1]
+
+        # 지수 이동평균선 계산
+        datas['ema5'].iloc[-1] = datas['close'].ewm(span=5).mean().iloc[-1]
+        datas['ema20'].iloc[-1] = datas['close'].ewm(span=20).mean().iloc[-1]
+        datas['ema60'].iloc[-1] = datas['close'].ewm(span=60).mean().iloc[-1]
+        
+        # MACD 지표 계산
+        datas['ema12'].iloc[-1] = datas['close'].ewm(span=12).mean().iloc[-1]
+        datas['ema26'].iloc[-1] = datas['close'].ewm(span=26).mean().iloc[-1]
+        datas['macd'].iloc[-1] = datas['ema12'].iloc[-1] - datas['ema26'].iloc[-1]
+        datas['macd_ma'].iloc[-1] = datas['macd'].rolling(window=9).mean().iloc[-1]
+        datas['macd_oscillator'].iloc[-1] = datas['macd'].iloc[-1] - datas['macd_ma'].iloc[-1]
+
+        return datas
+        
 
     # 한 Ticker 에 대한 개별 period 분석을 진행하는 함수
     def fractal_analyze(self, datas: dict, ticker: str, period: str):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] fractal_analyze function called : " + str(formatted_time) + " " + str(period))
-
-        # 전처리 및 보조지표 계산
-        for p in self.download_format.keys():
-            if p not in self.datas_cache[ticker].keys() or \
-               p not in self.vp_kdes_diffs_cache[ticker].keys() or \
-               p not in self.resistance_lines_cache[ticker].keys() or \
-               p not in self.support_lines_cache[ticker].keys() or \
-               p == period:
-                # 보조지표 계산
-                values, x, kdes_diff = self.calculate_indicators(datas[p][0], p) # datas[p][0] : 데이터, datas[p][1] : 마지막 다운로드 timestamp
-                self.datas_cache[ticker].update({p : values})
-                self.vp_kdes_diffs_cache[ticker].update({p : (x, kdes_diff)}) # x 값들과 그에 대한 미분값 순서대로 값을 넣음
-                
-                # 매물대 분석
-                now_price = self.datas_cache[ticker][p]['close'].iloc[-1]
-                now_kdes_diff_, resistance_lines_, support_lines_ = self.analyze_volume_profile(self.vp_kdes_diffs_cache[ticker], now_price, p)
-
-                # cache 에 저항선 및 지지선 데이터 저장하기
-                self.resistance_lines_cache[ticker].update({p : resistance_lines_}) # array
-                self.support_lines_cache[ticker].update({p : support_lines_}) # array
-                self.now_kdes_diffs_cache[ticker].update({p : now_kdes_diff_ }) # float
-
-                # 현재 period 까지 확인이 완료되면 보조지표 분석 진행
-                if p == period:
-                    break
         
+        # 매물대 분석
+        now_price = self.datas_cache[ticker][p]['close'].iloc[-1]
+        now_kdes_diff_, resistance_lines_, support_lines_ = self.analyze_volume_profile(self.vp_kdes_diffs_cache[ticker], now_price, p)
+        
+        # cache 에 저항선 및 지지선 데이터 저장하기
+        self.resistance_lines_cache[ticker].update({p : resistance_lines_}) # array
+        self.support_lines_cache[ticker].update({p : support_lines_}) # array
+        self.now_kdes_diffs_cache[ticker].update({p : now_kdes_diff_ }) # float
+
         # period (p >= period) 에 맞는 저항선 및 지지선 데이터 선정
         resistance_lines = []
         support_lines = []
@@ -191,7 +217,7 @@ class price_analyzer(threading.Thread):
                 break
         
         # 보조지표 분석, 조건 감시 및 알림 (fractal period set)
-        target_periods = [("1H", "6H"), ("6H", "1D"), ("1D", "1W")] # (period, longer_period)
+        target_periods = [("3m", "15m", "1H", "6H"), ("15m", "1H", "6H", "1D")] # (pivot_period, short_period, longer_period, market_period)
         available = False
 
         for idx, (p, _) in enumerate(target_periods):
@@ -201,13 +227,13 @@ class price_analyzer(threading.Thread):
                 break
 
         if available:
-            self.analyze_indicator_long(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=False)
-            self.analyze_indicator_short(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=False)
+            self.fractal_analyze_indicator_long(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=False)
+            self.fractal_analyze_indicator_short(self.datas_cache[ticker], ticker, target_period, resistance_lines, support_lines, debug=False)
         else:
             self.logger.info("[log] not available period in analyze_indicator : " + str(period))
 
 
-    def analyze_volume_profile(self, kdes_diffs, now_price, volume_profile_period):
+    def analyze_volume_profile(self, kdes_diffs: dict, now_price: float, volume_profile_period: str):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] analyze_volume_profile function called : " + str(formatted_time) + " " + str(volume_profile_period))
@@ -251,10 +277,10 @@ class price_analyzer(threading.Thread):
         return now_kdes_diff, resistance_lines, support_lines
 
 
-    def analyze_indicator_long(self, datas_, ticker, target_period, resistance_lines, support_lines, debug=False):
+    def fractal_analyze_indicator_long(self, datas_: pd.DataFrame, ticker: str, target_period, resistance_lines: list, support_lines: list, debug: bool = False):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
-        self.logger.info("[log] analyze_indicator_long function called : " + str(formatted_time))
+        self.logger.info("[log] fractal_analyze_indicator_long function called : " + str(formatted_time))
 
         if debug is True:
             self.logger.info("[log] debug is True")
@@ -314,10 +340,10 @@ class price_analyzer(threading.Thread):
         self.logger.info("")
 
 
-    def analyze_indicator_short(self, datas_, ticker, target_period, resistance_lines, support_lines, debug=False):
+    def fractal_analyze_indicator_short(self, datas_: pd.DataFrame, ticker: str, target_period, resistance_lines: list, support_lines: list, debug: bool = False):
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
-        self.logger.info("[log] analyze_indicator_short function called : " + str(formatted_time))
+        self.logger.info("[log] fractal_analyze_indicator_short function called : " + str(formatted_time))
 
         if debug is True:
             self.logger.info("[log] debug is True")
@@ -378,11 +404,11 @@ class price_analyzer(threading.Thread):
         self.logger.info("")
 
 
-    def send_to_telegram_bot(self, msg, png_file_path):
-        self.msg_queue.put({ "text" : msg, "photo" : png_file_path })
+    def send_to_telegram_bot(self, msg: str, png_file_path: str):
+        self.msg_queue.put({ "text" : msg, "photo" : png_file_path }) # telegram bot 에 텍스트 및 메세지 전송
         
 
-    def draw_graph(self, datas_, period, longer_period, resistance_lines, support_lines, debug=False) -> str: # return path of picture
+    def draw_graph(self, datas_: pd.DataFrame, period: str, longer_period: str, resistance_lines: list, support_lines: list, debug: bool = False) -> str: # return path of picture
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] draw_graph function called : " + str(formatted_time))
@@ -451,8 +477,30 @@ class price_analyzer(threading.Thread):
 
                 self.datas.update({ ticker : copy.deepcopy(download_prices) })
 
+                # 전처리 및 보조지표 계산
+                for idx, p in enumerate(list(self.download_format.keys())):
+                    if p not in self.datas_cache[ticker].keys() or \
+                       p not in self.vp_kdes_diffs_cache[ticker].keys() or \
+                       p not in self.resistance_lines_cache[ticker].keys() or \
+                       p not in self.support_lines_cache[ticker].keys() or \
+                       p == period:
+                        # 보조지표 계산
+                        values, x, kdes_diff = self.calculate_indicators(self.datas[ticker][p][0], p) # datas[p][0] : 데이터, datas[p][1] : 마지막 다운로드 timestamp
+                        self.datas_cache[ticker].update({p : values})
+                        self.vp_kdes_diffs_cache[ticker].update({p : (x, kdes_diff)}) # x 값들과 그에 대한 미분값 순서대로 값을 넣음
+
+                        # 더 큰 타임스탬프에 대한 보조지표 계산 및 반영 (매물대 계산 제외)
+                        for idx_ in range(idx, -1, -1):
+                            p_ = list(self.download_format.keys())[idx_]
+                            values_ = self.calculate_indicators_last_candle(self.datas_cache[ticker][p_], p_, self.datas_cache[ticker][p], p)
+                            self.datas_cache[ticker].update({p_ : values_})
+                        
+                        # 현재 period 까지 확인이 완료되면 fractal 분석 진행
+                        if p == period:
+                            break
+
                 if ticker == self.buy_sell_ticker:
-                    self.fractal_analyze(self.datas[ticker], ticker, period) # 매매를 위한 분석 진행
+                    self.fractal_analyze(self.datas_cache[ticker], ticker, period) # 매매를 위한 분석 진행
                 else:
                     pass # 시장 분석용 (전체적인 긍정 부정 의견)
                     

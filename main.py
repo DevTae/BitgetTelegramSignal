@@ -11,7 +11,7 @@ from telegram_bot import telegram_bot
 
 if __name__ == "__main__":
     
-    # { period : [ datas, lasttime (마지막 캔들), cycle ] }
+    # { period : [ datas, lasttime (마지막 캔들), download_cycle ] }
     download_format = OrderedDict({ "1D" : [ None, None, 86400000 ],
                                     "6H" : [ None, None, 21600000 ],
                                     "1H" : [ None, None, 3600000 ],
