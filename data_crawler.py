@@ -37,7 +37,7 @@ class data_crawler(threading.Thread):
 
                 if self.debug: # debug mode 일 때 다음 다운로드를 바로 다운로드 받도록 timestamp 수정
                     self.logger.info("[log] self.debug is True")
-                    self.downloaded_prices[ticker][period][1] = int(downloaded_datas[-1][0]) - self.download_candle * self.downloaded_prices[ticker][period][2]
+                    self.downloaded_prices[ticker][period][1] = int(downloaded_datas[-1][0]) - self.download_candle * self.downloaded_prices[ticker][period][2] * self.downloaded_prices[ticker][period][3]
                     time.sleep(2)
 
                 if self.data_queue is not None:
@@ -88,7 +88,7 @@ class data_crawler(threading.Thread):
             for idx, ticker in enumerate(self.supported_ticker):
                 for period in self.download_format.keys():
                     self.now = int(time.time() * 1000)
-                    if self.now - self.downloaded_prices[ticker][period][1] > self.downloaded_prices[ticker][period][2]:
+                    if self.now - self.downloaded_prices[ticker][period][1] > self.downloaded_prices[ticker][period][2] * self.downloaded_prices[ticker][period][3]:
                         downloaded_datas = self.download_datas(ticker=ticker, 
                                                                period=period, 
                                                                startTime=self.now - self.download_candle * self.downloaded_prices[ticker][period][2],
