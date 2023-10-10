@@ -231,8 +231,7 @@ class price_analyzer(threading.Thread):
         """
         
         # 보조지표 분석, 조건 감시 및 알림 (fractal period set)
-        target_periods = [("1m", "3m", "15m"), # 3분봉 매매법
-                          ("1m", "15m", "1H"), # 15분봉 매매법
+        target_periods = [("1m", "15m", "1H"), # 15분봉 매매법
                           ("1m", "1H", "6H"), # 1시간봉 매매법
                           ("1m", "6H", "1D") # 6시간봉 매매법
                           ] # (update_period, short_period, longer_period)
@@ -304,10 +303,10 @@ class price_analyzer(threading.Thread):
     def fractal_analyze_indicator_macd(self, is_long: bool, datas_: pd.DataFrame, ticker: str, target_period, resistance_lines: list, support_lines: list):
         direction_value = 1 if is_long else -1
         direction_info = "long" if is_long else "short"
-        cross_info_en = "golden" if is_long else "dead"
-        cross_info_en_simply = "GC" if is_long else "DC"
-        cross_info_kr = "골든" if is_long else "데드"
-
+        signal_info_kr = "매수 신호" if is_long else "매도 신호"
+        signal_info_en = "long signal" if is_long else "short signal"
+        signal_info_en_simply = "LONG" if is_long else "SHORT"
+        
         current_time = time.localtime()
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] fractal_analyze_indicator_macd function called : " + str(formatted_time) + " " + str(direction_info))
@@ -322,24 +321,28 @@ class price_analyzer(threading.Thread):
         now_price = datas_[short_period]['close'].iloc[-1]
 
         # macd 데이터 가져오기
-        ema12_longer = datas_[longer_period]['ema12'].iloc[-1]
-        ema26_longer = datas_[longer_period]['ema26'].iloc[-1]
-        macd_gc_prob_longer = datas_[longer_period]['macd_gc_prob'].iloc[-1]
-        macd_dc_prob_longer = datas_[longer_period]['macd_dc_prob'].iloc[-1]
-        macd_max_longer = datas_[longer_period]['macd_max'].iloc[-1]
-        macd_min_longer = datas_[longer_period]['macd_max'].iloc[-1]
+        macd_oscillator_longer_1 = datas_[longer_period]['macd_oscillator'].iloc[-1]
+        
+        macd_short_1 = datas_[short_period]['macd'].iloc[-1]
+        macd_ma_short_1 = datas_[short_period]['macd_ma'].iloc[-1]
 
-        ema12_short = datas_[short_period]['ema12'].iloc[-1]
-        ema26_short = datas_[short_period]['ema26'].iloc[-1]
         macd_oscillator_short_1 = datas_[short_period]['macd_oscillator'].iloc[-1]
         macd_oscillator_short_2 = datas_[short_period]['macd_oscillator'].iloc[-2]
+        macd_oscillator_short_3 = datas_[short_period]['macd_oscillator'].iloc[-3]
+        macd_oscillator_short_4 = datas_[short_period]['macd_oscillator'].iloc[-4]
+        macd_oscillator_short_5 = datas_[short_period]['macd_oscillator'].iloc[-5]
+        macd_oscillator_short_6 = datas_[short_period]['macd_oscillator'].iloc[-6]
 
-        # longer_period 의 리테스트 구간, 정배열에서 short_period 의 역배열의 macd osci 골든크로스 진행
-        if ((direction_value > 0 and macd_dc_prob_longer >= 0.6) or (direction_value < 0 and macd_gc_prob_longer >= 0.6)) and \
-           (ema12_longer - ema26_longer) * direction_value > 0 and (ema12_short - ema26_short) * direction_value < 0 and \
-           macd_oscillator_short_1 * direction_value > 0 and macd_oscillator_short_2 * direction_value <= 0 or self.drawing_first:
+        if macd_oscillator_longer_1 * direction_value > 0 and \
+           (macd_short_1 - macd_ma_short_1) * direction_value < 0 and \
+           macd_ma_short_1 * direction_value < 0 and \
+           (macd_oscillator_short_2 - macd_oscillator_short_1) * direction_value < 0 and \
+           (macd_oscillator_short_2 - macd_oscillator_short_3) * direction_value < 0 and \
+           (macd_oscillator_short_2 - macd_oscillator_short_4) * direction_value < 0 and \
+           (macd_oscillator_short_2 - macd_oscillator_short_5) * direction_value < 0 and \
+           (macd_oscillator_short_2 - macd_oscillator_short_6) * direction_value < 0 or self.drawing_first:
             # 알림 메세지 준비 - 현재가 및 손절가
-            msg = f"[{cross_info_en_simply} Signal] {short_period}봉 기준 MACD 지표의 {cross_info_kr}크로스가 발생하였습니다."
+            msg = f"[{signal_info_en_simply} Signal] {short_period}봉 기준 MACD 지표의 {signal_info_kr}가 발생하였습니다."
             if self.drawing_first:
                 self.drawing_first = False
                 msg += "\n\t해당 메세지는 테스트용 메세지입니다."
@@ -367,9 +370,9 @@ class price_analyzer(threading.Thread):
             thread = threading.Thread(target=self.send_to_telegram_bot, args=(msg, datas_, short_period, longer_period, resistance_lines, support_lines))
             thread.start()
 
-            self.logger.info("[log] MACD " + cross_info_en + " cross occured.")
+            self.logger.info("[log] MACD " + signal_info_en + " occured.")
         else:
-            self.logger.info("[log] MACD " + cross_info_en + " cross doesn't occured.")
+            self.logger.info("[log] MACD " + signal_info_en + " doesn't occured.")
         self.logger.info("------")
 
 
