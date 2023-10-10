@@ -321,10 +321,8 @@ class price_analyzer(threading.Thread):
         now_price = datas_[short_period]['close'].iloc[-1]
 
         # macd 데이터 가져오기
-        macd_oscillator_longer_1 = datas_[longer_period]['macd_oscillator'].iloc[-1]
-        
+        macd_longer_1 = datas_[longer_period]['macd_oscillator'].iloc[-1]
         macd_short_1 = datas_[short_period]['macd'].iloc[-1]
-        macd_ma_short_1 = datas_[short_period]['macd_ma'].iloc[-1]
 
         macd_oscillator_short_1 = datas_[short_period]['macd_oscillator'].iloc[-1]
         macd_oscillator_short_2 = datas_[short_period]['macd_oscillator'].iloc[-2]
@@ -333,9 +331,8 @@ class price_analyzer(threading.Thread):
         macd_oscillator_short_5 = datas_[short_period]['macd_oscillator'].iloc[-5]
         macd_oscillator_short_6 = datas_[short_period]['macd_oscillator'].iloc[-6]
 
-        if macd_oscillator_longer_1 * direction_value > 0 and \
-           (macd_short_1 - macd_ma_short_1) * direction_value < 0 and \
-           macd_ma_short_1 * direction_value < 0 and \
+        if macd_longer_1 * direction_value > 0 and \
+           macd_short_1 * direction_value < 0 and \
            (macd_oscillator_short_2 - macd_oscillator_short_1) * direction_value < 0 and \
            (macd_oscillator_short_2 - macd_oscillator_short_3) * direction_value < 0 and \
            (macd_oscillator_short_2 - macd_oscillator_short_4) * direction_value < 0 and \
