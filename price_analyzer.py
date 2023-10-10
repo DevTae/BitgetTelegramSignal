@@ -334,9 +334,8 @@ class price_analyzer(threading.Thread):
         macd_oscillator_short_1 = datas_[short_period]['macd_oscillator'].iloc[-1]
         macd_oscillator_short_2 = datas_[short_period]['macd_oscillator'].iloc[-2]
 
+        # longer_period 의 리테스트 구간, 정배열에서 short_period 의 역배열의 macd osci 골든크로스 진행
         if ((direction_value > 0 and macd_dc_prob_longer >= 0.6) or (direction_value < 0 and macd_gc_prob_longer >= 0.6)) and \
-           ((direction_value > 0 and abs(macd_max_longer) >= abs(macd_min_longer) * 3) or \
-            (direction_value < 0 and abs(macd_min_longer) >= abs(macd_max_longer) * 3)) and \
            (ema12_longer - ema26_longer) * direction_value > 0 and (ema12_short - ema26_short) * direction_value < 0 and \
            macd_oscillator_short_1 * direction_value > 0 and macd_oscillator_short_2 * direction_value <= 0 or self.drawing_first:
             # 알림 메세지 준비 - 현재가 및 손절가
@@ -394,22 +393,24 @@ class price_analyzer(threading.Thread):
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
         self.logger.info("[log] draw_graph function called : " + str(formatted_time))
 
+        print_period = 60
+
         fig = plt.figure(figsize=(12,8))
-        x = np.arange(-59, 1)
+        x = np.arange(-(print_period - 1), 1)
 
         # price and ema
         ax1 = plt.subplot2grid((4,2), (0,0), rowspan=2, fig=fig)
         ax2 = plt.subplot2grid((4,2), (0,1), rowspan=2, fig=fig)
-        ax1.set_ylim(min(datas_[longer_period]['close'].iloc[-60:]) * 0.99, max(datas_[longer_period]['close'].iloc[-60:]) * 1.01)
-        ax2.set_ylim(min(datas_[period]['close'].iloc[-60:]) * 0.99, max(datas_[period]['close'].iloc[-60:]) * 1.01)
-        ax1.plot(x, np.array(datas_[longer_period]['close'].iloc[-60:]), color='black')
-        ax1.plot(x, np.array(datas_[longer_period]['ema5'].iloc[-60:]), color='tomato', alpha=0.4)
-        ax1.plot(x, np.array(datas_[longer_period]['ema20'].iloc[-60:]), color='gold', alpha=0.4)
-        ax1.plot(x, np.array(datas_[longer_period]['ema60'].iloc[-60:]), color='green', alpha=0.4)
-        ax2.plot(x, np.array(datas_[period]['close'].iloc[-60:]), color='black')
-        ax2.plot(x, np.array(datas_[period]['ema5'].iloc[-60:]), color='tomato', alpha=0.4)
-        ax2.plot(x, np.array(datas_[period]['ema20'].iloc[-60:]), color='gold', alpha=0.4)
-        ax2.plot(x, np.array(datas_[period]['ema60'].iloc[-60:]), color='green', alpha=0.4)
+        ax1.set_ylim(min(datas_[longer_period]['close'].iloc[-print_period:]) * 0.99, max(datas_[longer_period]['close'].iloc[-print_period:]) * 1.01)
+        ax2.set_ylim(min(datas_[period]['close'].iloc[-print_period:]) * 0.99, max(datas_[period]['close'].iloc[-print_period:]) * 1.01)
+        ax1.plot(x, np.array(datas_[longer_period]['close'].iloc[-print_period:]), color='black')
+        ax1.plot(x, np.array(datas_[longer_period]['ema5'].iloc[-print_period:]), color='tomato', alpha=0.4)
+        ax1.plot(x, np.array(datas_[longer_period]['ema20'].iloc[-print_period:]), color='gold', alpha=0.4)
+        ax1.plot(x, np.array(datas_[longer_period]['ema60'].iloc[-print_period:]), color='green', alpha=0.4)
+        ax2.plot(x, np.array(datas_[period]['close'].iloc[-print_period:]), color='black')
+        ax2.plot(x, np.array(datas_[period]['ema5'].iloc[-print_period:]), color='tomato', alpha=0.4)
+        ax2.plot(x, np.array(datas_[period]['ema20'].iloc[-print_period:]), color='gold', alpha=0.4)
+        ax2.plot(x, np.array(datas_[period]['ema60'].iloc[-print_period:]), color='green', alpha=0.4)
         
         plt.title(period)
 
@@ -425,18 +426,18 @@ class price_analyzer(threading.Thread):
         # rsi
         ax3 = plt.subplot2grid((4,2), (2,0), fig=fig)
         ax4 = plt.subplot2grid((4,2), (2,1), fig=fig)
-        ax3.plot(x, np.array(datas_[longer_period]['rsi14'].iloc[-60:]), color='black')
-        ax3.plot(x, np.array(datas_[longer_period]['rsi14_ma'].iloc[-60:]), color='orange')
-        ax4.plot(x, np.array(datas_[period]['rsi14'].iloc[-60:]), color='black')
-        ax4.plot(x, np.array(datas_[period]['rsi14_ma'].iloc[-60:]), color='orange')
+        ax3.plot(x, np.array(datas_[longer_period]['rsi14'].iloc[-print_period:]), color='black')
+        ax3.plot(x, np.array(datas_[longer_period]['rsi14_ma'].iloc[-print_period:]), color='orange')
+        ax4.plot(x, np.array(datas_[period]['rsi14'].iloc[-print_period:]), color='black')
+        ax4.plot(x, np.array(datas_[period]['rsi14_ma'].iloc[-print_period:]), color='orange')
 
         # macd
         ax5 = plt.subplot2grid((4,2), (3,0), fig=fig)
         ax6 = plt.subplot2grid((4,2), (3,1), fig=fig)
-        ax5.plot(x, np.array(datas_[longer_period]['macd'].iloc[-60:]), color='black')
-        ax5.plot(x, np.array(datas_[longer_period]['macd_ma'].iloc[-60:]), color='orange')
-        ax6.plot(x, np.array(datas_[period]['macd'].iloc[-60:]), color='black')
-        ax6.plot(x, np.array(datas_[period]['macd_ma'].iloc[-60:]), color='orange')
+        ax5.plot(x, np.array(datas_[longer_period]['macd'].iloc[-print_period:]), color='black')
+        ax5.plot(x, np.array(datas_[longer_period]['macd_ma'].iloc[-print_period:]), color='orange')
+        ax6.plot(x, np.array(datas_[period]['macd'].iloc[-print_period:]), color='black')
+        ax6.plot(x, np.array(datas_[period]['macd_ma'].iloc[-print_period:]), color='orange')
 
         current_time = time.strftime("%Y-%m-%d_%H-%M-%S")  # 원하는 포맷으로 지정
         png_file_path = os.path.join("imgs", f"{current_time}.png")
