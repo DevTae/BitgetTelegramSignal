@@ -27,8 +27,8 @@ if __name__ == "__main__":
     supported_ticker = { buy_sell_ticker } # 시장 분석 대상 종목들
 
     # 텔레그램 API 관련 정보 (보안 주의)
-    telegram_api_key = "6436954798:AAGlQvHCA6mwYtr3AXZdY5klRCz0byNPeXU"
-    telegram_chat_id = "-1001691110767"
+    telegram_api_key = "6436954798:AAGlQvHCA6mwYtr3AXZdY5klRCz0byNPeXU" # revoked API key
+    telegram_chat_id = "-1001691110767" # unknown chat id
 
     # imgs 폴더 설정
     imgs_folder_path = "imgs"
