@@ -36,8 +36,12 @@
     ![24 1 1 비트겟 텔레그램 알림](https://github.com/DevTae/BitgetTelegramSignal/assets/55177359/be61a606-476d-49e6-904c-22446f3bf24a)
 
 
-- 매물대 분석 원리
-  - 가격과 거래량을 바탕으로 매물대를 분석하고, 미분계수를 활용하여 현재 가격의 위치를 수치화하였다.
+- 신호 포착 알고리즘
+  - 가격 알림 기준
+    - `MACD` 지표를 바탕으로 가격의 반전이 확인되면 신호를 주는 방식으로 구현하였다.
     
-     ![24 1 1 매물대분석사례](https://github.com/DevTae/BitgetTelegramSignal/assets/55177359/dd183ab6-9147-4c54-acc9-41db9b915345)
+  - 매물대 분석 원리
+    - 가격과 거래량을 바탕으로 매물대를 분석하고, 미분계수를 활용하여 현재 가격의 위치를 수치화하였다.
+
+      ![24 1 1 매물대분석사례](https://github.com/DevTae/BitgetTelegramSignal/assets/55177359/dd183ab6-9147-4c54-acc9-41db9b915345)
 
